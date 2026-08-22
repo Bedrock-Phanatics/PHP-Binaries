@@ -1,7 +1,7 @@
 ﻿$ErrorActionPreference="Stop"
 $ProgressPreference="SilentlyContinue"
 
-$PHP_VERSIONS=@("8.2.33", "8.3.33", "8.4.24", "8.5.9")
+$PHP_VERSIONS=@("8.4.24")
 
 $PHP_SDK_VER="2.4.0"
 $ARCH="x64"
@@ -27,8 +27,8 @@ $PHP_XXHASH_VER="0.2.0"
 $PHP_XDEBUG_VER="3.5.0"
 $PHP_ARRAYDEBUG_VER="0.2.1"
 $PHP_ENCODING_VER="1.0.0"
+$PHP_SNAPPY_VER="0.2.3"
 
-$PHP_IGBINARY_VER_PHP85="3.2.17RC1"
 
 function pm-echo {
     param ([string] $message)
@@ -151,7 +151,7 @@ function php-version-id {
 
 $PREFERRED_PHP_VERSION_BASE=""
 switch ($env:PM_VERSION_MAJOR) {
-    5 { $PREFERRED_PHP_VERSION_BASE="8.2" }
+    5 { $PREFERRED_PHP_VERSION_BASE="8.4" }
     $null { pm-fatal-error "Please specify PocketMine-MP major version by setting the PM_VERSION_MAJOR environment variable" }
     default { pm-fatal-error "PocketMine-MP $PM_VERSION_MAJOR is not supported by this version of the build script" }
 }
@@ -174,7 +174,7 @@ foreach ($version in $PHP_VERSIONS) {
 }
 if ($PHP_VER -eq "") {
     pm-echo-error "Unsupported PHP base version $PHP_VERSION_BASE"
-    pm-echo-error "Example inputs: 8.2, 8.3"
+    pm-echo-error "Only supported input: 8.4"
     exit 1
 }
 
@@ -184,41 +184,15 @@ $PHP_DISPLAY_VER="$PHP_VER"
 
 $CMAKE_TARGET="Visual Studio 17 2022"
 
-$VC_VER=""
-$SDL_TOOLSET_FLAG=""
-$CMAKE_TOOLSET_FLAG=""
-
 $PHP_VERSION_ID = php-version-id $PHP_VER
-if ($PHP_VERSION_ID -ge 80400) {
-    $VC_VER="vs17"
-    $SDK_TOOLSET_FLAG=""
-    $CMAKE_TOOLSET_FLAG=""
-} else {
-    #technically it's fine to build <8.4 with vs17, but this would make the binaries ABI-incompatible with community prebuilt extensions
-    $VC_VER="vs16"
-    $SDK_TOOLSET_FLAG="-s=14.29"
-    $CMAKE_TOOLSET_FLAG="-T v142"
-}
+$VC_VER="vs17"
+$SDK_TOOLSET_FLAG=""
+$CMAKE_TOOLSET_FLAG=""
 
 pm-echo "Selected PHP $PHP_VER ($PHP_VERSION_ID), SDK target $VC_VER ($SDK_TOOLSET_FLAG), CMake target $CMAKE_TARGET ($CMAKE_TOOLSET_FLAG)"
 
-if ($PHP_VERSION_ID -ge 80500) {
-    $PHP_IGBINARY_VER=$PHP_IGBINARY_VER_PHP85
-}
-$PHP_JIT_ENABLE_ARG="no"
-if ($PHP_VERSION_ID -ge 80400 -or $env:PHP_JIT_SUPPORT -eq 1) {
-    $PHP_JIT_ENABLE_ARG="yes"
-}
-
-if ($PHP_JIT_ENABLE_ARG -eq "yes") {
-    if ($PHP_VERSION_ID -lt 80400) {
-        pm-echo "[WARNING] JIT in versions below PHP 8.4 is highly unstable and not recommended"
-    } else {
-        pm-echo "[WARNING] JIT in PHP 8.4 has not been tested, use it with caution"
-    }
-} else {
-    pm-echo "JIT support in OPcache won't be compiled"
-}
+$PHP_JIT_ENABLE_ARG="yes"
+pm-echo "[WARNING] JIT in PHP 8.4 has not been tested, use it with caution"
 
 if ($env:SOURCES_PATH -ne $null) {
     $BASE_PATH=$env:SOURCES_PATH
@@ -478,6 +452,14 @@ function download-php-extensions {
     get-github-extension "arraydebug"            $PHP_ARRAYDEBUG_VER            "pmmp"     "ext-arraydebug"
     get-github-extension "encoding"              $PHP_ENCODING_VER              "pmmp"     "ext-encoding"
 
+    write-library "php-ext snappy" $PHP_SNAPPY_VER
+    write-download
+    (& cmd.exe /c "git clone --branch $PHP_SNAPPY_VER --depth 1 https://github.com/kjdev/php-ext-snappy.git snappy 2>&1") >> $log_file
+    (& cmd.exe /c "git -C snappy submodule update --init --depth 1 snappy 2>&1") >> $log_file
+    $snappy_header = (Get-Content snappy\snappy\snappy-stubs-public.h.in -Raw).Replace('${HAVE_SYS_UIO_H_01}', '0').Replace('${PROJECT_VERSION_MAJOR}', '1').Replace('${PROJECT_VERSION_MINOR}', '2').Replace('${PROJECT_VERSION_PATCH}', '2')
+    Set-Content -Path snappy\snappy\snappy-stubs-public.h -Value $snappy_header -Encoding ascii
+    write-done
+
     write-library "php-ext crypto" $PHP_CRYPTO_VER
     write-download
     (& cmd.exe /c "git clone https://github.com/bukka/php-crypto.git crypto 2>&1") >> $log_file
@@ -550,6 +532,7 @@ sdk-command "configure^`
     --enable-phar^`
     --enable-recursionguard=shared^`
     --enable-sockets^`
+    --enable-snappy=shared^`
     --enable-tokenizer^`
     --enable-xmlreader^`
     --enable-xmlwriter^`
@@ -627,10 +610,9 @@ append-file-utf8 "extension=php_leveldb.dll" $php_ini
 append-file-utf8 "extension=php_crypto.dll" $php_ini
 append-file-utf8 "extension=php_libdeflate.dll" $php_ini
 append-file-utf8 "extension=php_encoding.dll" $php_ini
+append-file-utf8 "extension=php_snappy.dll" $php_ini
 append-file-utf8 "igbinary.compact_strings=0" $php_ini
-if ($PHP_VERSION_ID -lt 80500) {
-    append-file-utf8 "zend_extension=php_opcache.dll" $php_ini
-}
+append-file-utf8 "zend_extension=php_opcache.dll" $php_ini
 append-file-utf8 "opcache.enable=1" $php_ini
 append-file-utf8 "opcache.enable_cli=1" $php_ini
 append-file-utf8 "opcache.save_comments=1" $php_ini

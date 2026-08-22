@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-PHP_VERSIONS=("8.2.33" "8.3.33" "8.4.24" "8.5.9")
+PHP_VERSIONS=("8.4.24")
 
 #### NOTE: Tags with "v" prefixes behave weirdly in the GitHub API. They'll be stripped in some places but not others.
 #### Use commit hashes to avoid this.
@@ -36,8 +36,7 @@ EXT_MORTON_VERSION="0.1.2"
 EXT_XXHASH_VERSION="0.2.0"
 EXT_ARRAYDEBUG_VERSION="0.2.1"
 EXT_ENCODING_VERSION="1.0.0"
-
-EXT_IGBINARY_VERSION_PHP85="3.2.17RC1"
+EXT_SNAPPY_VERSION="0.2.3"
 
 function write_out {
 	echo "[$1] $2"
@@ -265,7 +264,7 @@ function php_version_id {
 PREFERRED_PHP_VERSION_BASE=""
 case $PM_VERSION_MAJOR in
 	5)
-		PREFERRED_PHP_VERSION_BASE="8.2"
+		PREFERRED_PHP_VERSION_BASE="8.4"
 		;;
 	"")
 		write_error "Please specify PocketMine-MP major version target with -P (e.g. -P5)"
@@ -296,28 +295,15 @@ done
 
 if [ "$PHP_VERSION" == "" ]; then
 	write_error "Unsupported PHP base version $PHP_VERSION_BASE"
-	write_error "Example inputs: 8.2, 8.3"
+	write_error "Only supported input: 8.4"
 	exit 1
 fi
 
 PHP_VERSION_ID=$(php_version_id "$PHP_VERSION")
 write_out "opt" "Selected PHP $PHP_VERSION ($PHP_VERSION_ID)"
 
-if [ $PHP_VERSION_ID -ge 80500 ]; then
-  EXT_IGBINARY_VERSION="$EXT_IGBINARY_VERSION_PHP85"
-fi
-if [ $PHP_VERSION_ID -ge 80400 ]; then
-  HAVE_OPCACHE_JIT="yes"
-fi
-if [ "$HAVE_OPCACHE_JIT" == "yes" ]; then
-  if [ $PHP_VERSION_ID -lt 80400 ]; then
-    write_out "WARNING" "JIT in versions below PHP 8.4 is highly unstable and not recommended"
-  else
-    write_out "WARNING" "JIT in PHP 8.4+ may be unstable, use it with caution"
-  fi
-else
-  write_out "INFO" "JIT support in OPcache won't be compiled"
-fi
+HAVE_OPCACHE_JIT="yes"
+write_out "WARNING" "JIT in PHP 8.4 may be unstable, use it with caution"
 
 #Needed to use aliases
 shopt -s expand_aliases
@@ -466,11 +452,9 @@ else
 fi
 
 if [ "$DO_STATIC" == "yes" ]; then
-    if [ "$PHP_VERSION_ID" -lt 80500 ]; then
-		HAVE_OPCACHE="no"
-		HAVE_OPCACHE_JIT="no"
-		write_out "warning" "OPcache cannot be used on static builds prior to PHP 8.5; this may have a negative effect on performance"
-	fi
+	HAVE_OPCACHE="no"
+	HAVE_OPCACHE_JIT="no"
+	write_out "warning" "OPcache cannot be used on static PHP 8.4 builds; this may have a negative effect on performance"
 	if [ "$FSANITIZE_OPTIONS" != "" ]; then
 		write_out "warning" "Sanitizers cannot be used on static builds"
 	fi
@@ -1151,6 +1135,11 @@ get_github_extension "arraydebug" "$EXT_ARRAYDEBUG_VERSION" "pmmp" "ext-arraydeb
 
 get_github_extension "encoding" "$EXT_ENCODING_VERSION" "pmmp" "ext-encoding"
 
+echo -n "  snappy: downloading $EXT_SNAPPY_VERSION..."
+git clone --branch "$EXT_SNAPPY_VERSION" --depth 1 https://github.com/kjdev/php-ext-snappy.git "$BUILD_DIR/php/ext/snappy" >> "$DIR/install.log" 2>&1
+git -C "$BUILD_DIR/php/ext/snappy" submodule update --init --depth 1 snappy >> "$DIR/install.log" 2>&1
+write_done
+
 cafile=""
 if [[ "$COMPILE_TARGET" == "mac"* ]]; then
 	cafile="/etc/ssl/cert.pem"
@@ -1210,15 +1199,9 @@ if [ "$IS_CROSSCOMPILE" == "yes" ]; then
 			export LIBS="$LIBS -lpthread -ldl -lresolv"
 		else
 			#workarounds for musl 1.2.5
-			if [ "$PHP_VERSION_ID" -lt 80400 ]; then
-				sed -i=".backup" 's/cookie_io_functions_use_off64_t=yes/cookie_io_functions_use_off64_t=no/' ./configure
-				export ac_cv_pread=yes
-				export ac_cv_pwrite=yes
-			else
-				export php_cv_type_cookie_off64_t=no
-				export php_cv_func_pread=yes
-				export php_cv_func_pwrite=yes
-			fi
+			export php_cv_type_cookie_off64_t=no
+			export php_cv_func_pread=yes
+			export php_cv_func_pwrite=yes
 			export LIBS="$LIBS -lpthread -lresolv"
 		fi
 	else
@@ -1313,6 +1296,7 @@ $HAVE_MYSQLI \
 --enable-xxhash \
 --enable-arraydebug \
 --enable-encoding \
+--enable-snappy \
 $HAVE_VALGRIND \
 $CONFIGURE_FLAGS >> "$DIR/install.log" 2>&1
 write_compile
@@ -1387,9 +1371,7 @@ if [ -n "$cafile" ]; then
 fi
 
 if [ "$HAVE_OPCACHE" == "yes" ]; then
-	if [ "$PHP_VERSION_ID" -lt 80500 ]; then
-		echo "zend_extension=opcache.so" >> "$INSTALL_DIR/bin/php.ini"
-	fi
+	echo "zend_extension=opcache.so" >> "$INSTALL_DIR/bin/php.ini"
 	echo "opcache.enable=1" >> "$INSTALL_DIR/bin/php.ini"
 	echo "opcache.enable_cli=1" >> "$INSTALL_DIR/bin/php.ini"
 	echo "opcache.save_comments=1" >> "$INSTALL_DIR/bin/php.ini"

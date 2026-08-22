@@ -4,16 +4,7 @@
 ## Prebuilt binaries
 ### Actively updated "latest" URLs
 - [PM5 default](https://github.com/pmmp/PHP-Binaries/releases/tag/pm5-latest)
-- [PM5 PHP 8.2](https://github.com/pmmp/PHP-Binaries/releases/tag/pm5-php-8.2-latest) (default for PM 5.10+)
-- [PM5 PHP 8.3](https://github.com/pmmp/PHP-Binaries/releases/tag/pm5-php-8.3-latest) (not officially supported, but works in PM 5.9+)
-- [PM5 PHP 8.4](https://github.com/pmmp/PHP-Binaries/releases/tag/pm5-php-8.4-latest) (not officially supported, but works in PM 5.33+)
-
-### Legacy binaries, no longer updated
-- [PM4 PHP 8.0](https://github.com/pmmp/PHP-Binaries/releases/tag/pm4-php-8.0-latest) (default for PM 4.0+)
-- [PM4 PHP 8.1](https://github.com/pmmp/PHP-Binaries/releases/tag/pm4-php-8.1-latest) (default for PM 4.21+)
-- [PM4 PHP 8.2](https://github.com/pmmp/PHP-Binaries/releases/tag/pm4-php-8.2-latest) (never officially supported, but works in PM 4.12+)
-- [PM5 PHP 8.0](https://github.com/pmmp/PHP-Binaries/releases/tag/pm5-php-8.0-latest) (default for PM 5.0 alpha)
-- [PM5 PHP 8.1](https://github.com/pmmp/PHP-Binaries/releases/tag/pm5-php-8.1-latest) (default for PM 5.0+)
+- [PM5 PHP 8.4](https://github.com/pmmp/PHP-Binaries/releases/tag/pm5-php-8.4-latest) (default)
 
 ## compile.sh
 
@@ -51,14 +42,13 @@ Bash script used to compile PHP on MacOS and Linux platforms. Make sure you have
 | -v           | Enable Valgrind support in PHP                                                                              |
 | -x           | Specifies we are doing cross-compile                                                                        |
 | -P           | Set target to the specified major PocketMine-MP version specified (currently only `5` is supported)         |
-| -z           | PHP version to build, e.g `8.2` (optional, if not specified, will be auto-selected by PM version)           |
+| -z           | PHP version to build, must be `8.4` (optional, if not specified, will be auto-selected by PM version)           |
 
 ### Example:
 
 | Target          | Arguments                         |
 |-----------------|-----------------------------------|
 | linux64         | ``-t linux64 -j4 -P5``            |
-| linux64, PM4    | ``-t linux64 -j4 -P4``            |
 | mac64           | ``-t mac-x86-64 -j4 -P5``         |
 | android-aarch64 | ``-t android-aarch64 -x -j4 -P5`` |
 
@@ -74,8 +64,7 @@ This script doesn't accept parameters, but the following environment variables a
 | `PHP_DEBUG_BUILD`  | Disables optimisations and builds PHP with detailed debugging information (useful for debugging segfaults)|
 | `SOURCES_PATH`     | Where to put the downloaded sources for compilation                                                       |
 | `PM_VERSION_MAJOR` | Major version of PocketMine-MP to build for (currently only `5` is supported)                             |
-| `PHP_VERSION_BASE` | PHP version to build, e.g `8.2` (optional, if not specified, will be auto-selected by PM version)         |
-| `PHP_JIT_SUPPORT`  | Whether to compile with OPcache JIT, set to `1` for yes                                                   |
+| `PHP_VERSION_BASE` | PHP version to build, must be `8.4` (optional, if not specified, will be auto-selected by PM version)         |
 
 ## For developers: Version info sources
 ### Libraries
@@ -100,7 +89,7 @@ This script doesn't accept parameters, but the following environment variables a
 
 | Link to package | Needed for | Notes |
 |:----------------|:-----------|:------|
-| [PHP](https://www.php.net/releases/?json&version=8.2) | Everything | Replace 8.2 in the URL with your chosen version |
+| [PHP](https://www.php.net/releases/?json&version=8.4) | Everything | PHP is currently pinned to the 8.4 series |
 | [pmmpthread](https://github.com/pmmp/ext-pmmpthread/releases) | PHP threading | |
 | [yaml](https://github.com/php/pecl-file_formats-yaml/tags) | YAML config parsing | Yes, the mix of - and _ is intentional. Don't ask me. |
 | [leveldb](https://github.com/pmmp/php-leveldb/commits/pmmp-mojang-compatible/) | Bedrock world support | Custom version to provide `LEVELDB_ZLIB_RAW_COMPRESSION` support |
@@ -114,6 +103,7 @@ This script doesn't accept parameters, but the following environment variables a
 | [xxhash](https://github.com/pmmp/ext-xxhash/releases) | Not currently used | Could be replaced by `hash()` in recent versions of PHP but this extension has much better performance |
 | [arraydebug](https://github.com/pmmp/ext-arraydebug/tags) | Debugging array hash collisions | |
 | [encoding](https://github.com/pmmp/ext-encoding/releases) | Disk & network data encoding & decoding | Significantly faster alternative to [BinaryUtils](https://github.com/pmmp/BinaryUtils) |
+| [snappy](https://github.com/kjdev/php-ext-snappy/releases) | Snappy compression and decompression | Bundles the Google Snappy library |
 
 ### Misc
 
