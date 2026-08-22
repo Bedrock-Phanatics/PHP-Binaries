@@ -14,6 +14,8 @@ concurrency:
 jobs:
   all-builds:
     name: PM${{ matrix.pm-version-major }} - PHP ${{ matrix.php-version-base }}
+    permissions:
+      contents: write
     strategy:
       matrix:
         include:
@@ -33,6 +35,8 @@ jobs:
     name: Publish archive release
     needs: [all-builds]
     runs-on: ubuntu-22.04
+    permissions:
+      contents: write
     if: ${{ github.ref_name == 'stable' && github.ref_type == 'branch' && !contains(github.event.head_commit.message, '[no release]') }}
 
     steps:
