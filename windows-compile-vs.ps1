@@ -456,6 +456,14 @@ function download-php-extensions {
     write-download
     (& cmd.exe /c "git clone --branch $PHP_SNAPPY_VER --depth 1 https://github.com/kjdev/php-ext-snappy.git snappy 2>&1") >> $log_file
     (& cmd.exe /c "git -C snappy submodule update --init --depth 1 snappy 2>&1") >> $log_file
+    $snappy_config_path = "snappy\config.w32"
+    $snappy_config = Get-Content $snappy_config_path -Raw
+    $snappy_sources_directive = 'ADD_SOURCES("snappy",'
+    if (!$snappy_config.Contains($snappy_sources_directive)) {
+        pm-fatal-error "Unable to patch ext-snappy source paths in config.w32"
+    }
+    $snappy_config = $snappy_config.Replace($snappy_sources_directive, 'ADD_SOURCES(configure_module_dirname + "/snappy",')
+    Set-Content -Path $snappy_config_path -Value $snappy_config -Encoding ascii
     $snappy_header = (Get-Content snappy\snappy\snappy-stubs-public.h.in -Raw).Replace('${HAVE_SYS_UIO_H_01}', '0').Replace('${PROJECT_VERSION_MAJOR}', '1').Replace('${PROJECT_VERSION_MINOR}', '2').Replace('${PROJECT_VERSION_PATCH}', '2')
     Set-Content -Path snappy\snappy\snappy-stubs-public.h -Value $snappy_header -Encoding ascii
     write-done

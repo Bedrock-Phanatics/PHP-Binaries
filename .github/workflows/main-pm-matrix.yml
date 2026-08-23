@@ -266,7 +266,7 @@ jobs:
           path: |
             *PHP-${{ inputs.php-version-base }}-Windows-x64-PM${{ inputs.pm-version-major }}*.zip
             compile.log
-            windows-compile-vs.bat
+            windows-compile-vs.ps1
           if-no-files-found: error
 
 
