@@ -6,9 +6,9 @@
 - [PM5 default](https://github.com/pmmp/PHP-Binaries/releases/tag/pm5-latest)
 - [PM5 PHP 8.4](https://github.com/pmmp/PHP-Binaries/releases/tag/pm5-php-8.4-latest) (default)
 
-### Game hosting / Pterodactyl
+### Game hosting
 
-If your host or file manager does not preserve Linux symbolic links, use the `-hosting.tar.gz` Linux build.
+If your host or file manager does not preserve Linux symbolic (and you can't use the [Egg](https://github.com/Bedrock-Phanatics/Quark-Egg) links, use the `-hosting.tar.gz` Linux build.
 
 Delete your existing `bin/` folder, then extract or upload the new `bin/` folder into your server root. Use the normal Linux build for standard Linux/SSH installations.
 
