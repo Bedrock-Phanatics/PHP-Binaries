@@ -6,6 +6,12 @@
 - [PM5 default](https://github.com/pmmp/PHP-Binaries/releases/tag/pm5-latest)
 - [PM5 PHP 8.4](https://github.com/pmmp/PHP-Binaries/releases/tag/pm5-php-8.4-latest) (default)
 
+### Game hosting / Pterodactyl
+
+If your host or file manager does not preserve Linux symbolic links, use the `-hosting.tar.gz` Linux build.
+
+Delete your existing `bin/` folder, then extract or upload the new `bin/` folder into your server root. Use the normal Linux build for standard Linux/SSH installations.
+
 ## compile.sh
 
 Bash script used to compile PHP on MacOS and Linux platforms. Make sure you have ``make autoconf automake libtool m4 wget getconf gzip bzip2 bison g++ git cmake pkg-config re2c ca-certificates``.
