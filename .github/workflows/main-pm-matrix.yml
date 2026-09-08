@@ -134,10 +134,42 @@ jobs:
           trap "exit 1" ERR
           ./compile.sh -t linux64 -j 4 -g -P ${{ inputs.pm-version-major }} -c ./download_cache -D -z ${{ inputs.php-version-base }}
 
-      - name: Create tarball
+      - name: Create tarballs
         run: |
-          tar -czf ./PHP-${{ inputs.php-version-base }}-Linux-x86_64-PM${{ inputs.pm-version-major }}.tar.gz bin
-          tar -czf ./Z-PHP-${{ inputs.php-version-base }}-Linux-x86_64-PM${{ inputs.pm-version-major }}-debugging-symbols.tar.gz bin-debug
+          set -euo pipefail
+
+          NORMAL_ARCHIVE="PHP-${{ inputs.php-version-base }}-Linux-x86_64-PM${{ inputs.pm-version-major }}.tar.gz"
+          HOSTING_ARCHIVE="PHP-${{ inputs.php-version-base }}-Linux-x86_64-PM${{ inputs.pm-version-major }}-hosting.tar.gz"
+          DEBUG_ARCHIVE="Z-PHP-${{ inputs.php-version-base }}-Linux-x86_64-PM${{ inputs.pm-version-major }}-debugging-symbols.tar.gz"
+
+          # Normal Linux archive: preserve symbolic links.
+          tar -czf "$NORMAL_ARCHIVE" bin
+
+          # Hosting-safe archive: replace symbolic links with real files.
+          # This allows users to extract/upload the binary through panels,
+          # Windows, FTP clients, etc. which may not preserve Linux symlinks.
+          rm -rf hosting-root
+          mkdir -p hosting-root
+          cp -aL bin hosting-root/bin
+
+          # The hosting archive must not contain any symbolic links.
+          if find hosting-root/bin -type l -print -quit | grep -q .; then
+            echo "::error::Hosting-safe PHP build still contains symbolic links"
+            find hosting-root/bin -type l -ls
+            exit 1
+          fi
+
+          # Verify the copied PHP binary can start before publishing it.
+          ./hosting-root/bin/php7/bin/php -v
+
+          # Keep the archive layout identical to the normal build ("bin/...").
+          tar -C hosting-root -czf "$HOSTING_ARCHIVE" bin
+
+          # Debug symbols remain unchanged.
+          tar -czf "$DEBUG_ARCHIVE" bin-debug
+
+          echo "Created archives:"
+          ls -lh "$NORMAL_ARCHIVE" "$HOSTING_ARCHIVE" "$DEBUG_ARCHIVE"
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v7
@@ -316,6 +348,7 @@ jobs:
           echo "Build number: ${{ github.run_number }}" >> changelog.md
           echo -e "\n\n\n" >> changelog.md
           echo ":information_source: **Linux/MacOS users**: Please see [this page](https://doc.pmmp.io/en/rtfd/faq/installation/opcache.so.html) to fix extension loading errors. Also, check out the [PocketMine-MP Linux/MacOS installer](https://doc.pmmp.io/en/rtfd/installation/get-dot-pmmp-dot-io.html)." >> changelog.md
+          echo ':package: **Game hosting / panel users**: If you cannot use SSH or your host/file manager does not preserve Linux symbolic links, use the `-hosting.tar.gz` Linux build. It contains real files instead of symlinks and avoids shared-library errors such as `file too short`.' >> changelog.md
           echo ":warning: **Windows users**: Don't forget to install [Visual C++ Redistributable](https://aka.ms/vs/17/release/vc_redist.x64.exe) or the binary will not work!" >> changelog.md
           echo -e "\n\n\n" >> changelog.md
 
@@ -364,4 +397,3 @@ jobs:
           bodyFile: ${{ github.workspace }}/changelog.md
           makeLatest: false
           prerelease: ${{ inputs.pm-preview == true }}
-
