@@ -4,15 +4,15 @@ on:
   workflow_call:
     inputs:
       pm-version-major:
-        description: 'PocketMine-MP major version'
+        description: "PocketMine-MP major version"
         required: true
         type: number
       php-version-base:
-        description: 'PHP base version'
+        description: "PHP base version"
         required: true
         type: string
       special-release:
-        description: 'Special release type to create (pm-default-latest, pm-default, none)'
+        description: "Special release type to create (pm-default-latest, pm-default, none)"
         required: true
         type: string
       pm-preview:
@@ -20,261 +20,197 @@ on:
         required: true
         type: boolean
 
-env:
-  MUSL_CROSS_MAKE_VERSION: b7b27ee2f37b5794658dce8a611f91feb456bf91
-
 jobs:
-  android:
-    name: Android arm64
-    runs-on: ubuntu-22.04
-
-    steps:
-      - uses: actions/checkout@v7
-
-      - name: Install tools and dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install make autoconf automake libtool libtool-bin m4 wget libc-bin gzip bzip2 bison g++ git re2c
-
-      - name: Prepare compile.sh download cache
-        id: download-cache
-        uses: actions/cache@v6
-        with:
-          path: ./download_cache
-          key: compile-sh-cache-ssl-https-${{ hashFiles('./compile.sh') }}
-          restore-keys: compile-sh-cache-ssl-https-
-
-      - name: Fetch compiler cache
-        id: compiler-cache
-        uses: actions/cache@v6
-        with:
-          path: ${{ github.workspace }}/compiler
-          key: musl-cross-make-${{ env.MUSL_CROSS_MAKE_VERSION }}
-
-      - name: Checkout musl-cross-make
-        if: steps.compiler-cache.outputs.cache-hit != 'true'
-        uses: actions/checkout@v7
-        with:
-          repository: axolotl-pm/musl-cross-make
-          path: musl-cross-make
-          ref: ${{ env.MUSL_CROSS_MAKE_VERSION }}
-
-      - name: Build compiler
-        if: steps.compiler-cache.outputs.cache-hit != 'true'
-        working-directory: musl-cross-make
-        run: |
-          echo "TARGET = aarch64-linux-musl" > config.mak
-          make -j$(nproc)
-          make install
-          mv ./output "${{ github.workspace }}/compiler"
-
-      - name: Compile PHP
-        run: |
-          export PATH="${{ github.workspace }}/compiler/bin:$PATH"
-
-          # Used "set -ex" instead of hashbang since script isn't executed with hashbang
-          set -ex
-          trap "exit 1" ERR
-          ./compile.sh -t android-aarch64 -x -j 4 -g -P ${{ inputs.pm-version-major }} -c ./download_cache -D -z ${{ inputs.php-version-base }}
-        
-      
-      - name: Create tarball
-        run: |
-          tar -czf ./PHP-${{ inputs.php-version-base }}-Android-arm64-PM${{ inputs.pm-version-major }}.tar.gz bin
-          tar -czf ./Z-PHP-${{ inputs.php-version-base }}-Android-arm64-PM${{ inputs.pm-version-major }}-debugging-symbols.tar.gz bin-debug
-
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v7
-        if: always()
-        with:
-          name: PHP-${{ inputs.php-version-base }}-Android-PM${{ inputs.pm-version-major }}
-          path: |
-            ./*PHP-${{ inputs.php-version-base }}-Android-arm64-PM${{ inputs.pm-version-major }}*.tar.gz
-            install.log
-            compile.sh
-          if-no-files-found: error
-
-      - name: Prepare workspace for upload
-        if: failure()
-        run: tar -czf workspace.tar.gz install_data
-
-      - name: Upload workspace
-        uses: actions/upload-artifact@v7
-        if: failure()
-        with:
-          name: PHP-${{ inputs.php-version-base }}-Android-workspace-PM${{ inputs.pm-version-major }}
-          path: |
-            workspace.tar.gz
-          if-no-files-found: error
-
   linux:
-    name: Linux
-    runs-on: ubuntu-22.04
+    name: Linux ${{ matrix.arch }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x86_64
+            runner: ubuntu-22.04
+            target: linux64
+          - arch: arm64
+            runner: ubuntu-22.04-arm
+            target: linux-arm64
 
     steps:
       - uses: actions/checkout@v7
 
-      - name: Install tools and dependencies
+      - name: Install build dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install make autoconf automake libtool libtool-bin m4 wget libc-bin gzip bzip2 bison g++ git re2c
+          sudo apt-get install -y \
+            make autoconf automake libtool libtool-bin m4 wget \
+            libc-bin gzip bzip2 xz-utils bison g++ git cmake \
+            pkg-config re2c ca-certificates file
 
-      - name: Prepare compile.sh download cache
-        id: download-cache
+      - name: Cache source downloads
         uses: actions/cache@v6
         with:
           path: ./download_cache
-          key: compile-sh-cache-ssl-https-${{ hashFiles('./compile.sh') }}
-          restore-keys: compile-sh-cache-ssl-https-
+          key: compile-sh-downloads-${{ hashFiles('./compile.sh') }}
+          restore-keys: compile-sh-downloads-
 
       - name: Compile PHP
         run: |
-          # Used "set -ex" instead of hashbang since script isn't executed with hashbang
-          set -ex
-          trap "exit 1" ERR
-          ./compile.sh -t linux64 -j 4 -g -P ${{ inputs.pm-version-major }} -c ./download_cache -D -z ${{ inputs.php-version-base }}
+          set -euxo pipefail
+          ./compile.sh \
+            -t "${{ matrix.target }}" \
+            -j "$(nproc)" \
+            -g \
+            -P "${{ inputs.pm-version-major }}" \
+            -c ./download_cache \
+            -z "${{ inputs.php-version-base }}"
 
-      - name: Create tarballs
+      - name: Validate and package
         run: |
           set -euo pipefail
 
-          NORMAL_ARCHIVE="PHP-${{ inputs.php-version-base }}-Linux-x86_64-PM${{ inputs.pm-version-major }}.tar.gz"
-          HOSTING_ARCHIVE="PHP-${{ inputs.php-version-base }}-Linux-x86_64-PM${{ inputs.pm-version-major }}-hosting.tar.gz"
-          DEBUG_ARCHIVE="Z-PHP-${{ inputs.php-version-base }}-Linux-x86_64-PM${{ inputs.pm-version-major }}-debugging-symbols.tar.gz"
+          NORMAL_ARCHIVE="PHP-${{ inputs.php-version-base }}-Linux-${{ matrix.arch }}-PM${{ inputs.pm-version-major }}.tar.gz"
+          HOSTING_ARCHIVE="PHP-${{ inputs.php-version-base }}-Linux-${{ matrix.arch }}-PM${{ inputs.pm-version-major }}-hosting.tar.gz"
+          PHP_BINARY="bin/php7/bin/php"
 
-          # Normal Linux archive: preserve symbolic links.
+          if [ ! -x "$PHP_BINARY" ]; then
+            echo "::error::$PHP_BINARY is missing or not executable"
+            exit 1
+          fi
+
+          PHP_FILE_INFO="$(file "$PHP_BINARY")"
+          echo "$PHP_FILE_INFO"
+
+          case "${{ matrix.arch }}" in
+            x86_64)
+              echo "$PHP_FILE_INFO" | grep -q "x86-64" || {
+                echo "::error::Expected an x86_64 PHP binary"
+                exit 1
+              }
+              ;;
+            arm64)
+              echo "$PHP_FILE_INFO" | grep -Eq "ARM aarch64|aarch64" || {
+                echo "::error::Expected an ARM64/AArch64 PHP binary"
+                exit 1
+              }
+              ;;
+          esac
+
+          "$PHP_BINARY" -v
+
+          # Standard Linux archive: preserves Unix symbolic links.
           tar -czf "$NORMAL_ARCHIVE" bin
 
-          # Hosting-safe archive: replace symbolic links with real files.
-          # This allows users to extract/upload the binary through panels,
-          # Windows, FTP clients, etc. which may not preserve Linux symlinks.
+          # Hosting-safe archive: dereference symlinks so panels/upload tools
+          # cannot turn shared-library symlinks into broken tiny files.
           rm -rf hosting-root
           mkdir -p hosting-root
           cp -aL bin hosting-root/bin
 
-          # The hosting archive must not contain any symbolic links.
           if find hosting-root/bin -type l -print -quit | grep -q .; then
-            echo "::error::Hosting-safe PHP build still contains symbolic links"
+            echo "::error::Hosting archive still contains symbolic links"
             find hosting-root/bin -type l -ls
             exit 1
           fi
 
-          # Verify the copied PHP binary can start before publishing it.
-          ./hosting-root/bin/php7/bin/php -v
+          HOSTING_PHP="hosting-root/bin/php7/bin/php"
+          HOSTING_FILE_INFO="$(file "$HOSTING_PHP")"
+          echo "$HOSTING_FILE_INFO"
 
-          # Keep the archive layout identical to the normal build ("bin/...").
+          case "${{ matrix.arch }}" in
+            x86_64)
+              echo "$HOSTING_FILE_INFO" | grep -q "x86-64" || {
+                echo "::error::Hosting PHP binary is not x86_64"
+                exit 1
+              }
+              ;;
+            arm64)
+              echo "$HOSTING_FILE_INFO" | grep -Eq "ARM aarch64|aarch64" || {
+                echo "::error::Hosting PHP binary is not ARM64/AArch64"
+                exit 1
+              }
+              ;;
+          esac
+
+          "$HOSTING_PHP" -v
           tar -C hosting-root -czf "$HOSTING_ARCHIVE" bin
 
-          # Debug symbols remain unchanged.
-          tar -czf "$DEBUG_ARCHIVE" bin-debug
+          echo "Created:"
+          ls -lh "$NORMAL_ARCHIVE" "$HOSTING_ARCHIVE"
 
-          echo "Created archives:"
-          ls -lh "$NORMAL_ARCHIVE" "$HOSTING_ARCHIVE" "$DEBUG_ARCHIVE"
-
-      - name: Upload artifacts
+      - name: Upload Linux binaries
         uses: actions/upload-artifact@v7
-        if: always()
         with:
-          name: PHP-${{ inputs.php-version-base }}-Linux-PM${{ inputs.pm-version-major }}
+          name: PHP-${{ inputs.php-version-base }}-Linux-${{ matrix.arch }}-PM${{ inputs.pm-version-major }}
           path: |
-            ./*PHP-${{ inputs.php-version-base }}-Linux-x86_64-PM${{ inputs.pm-version-major }}*.tar.gz
-            install.log
-            compile.sh
-          if-no-files-found: error
-
-      - name: Prepare workspace for upload
-        if: failure()
-        run: tar -czf workspace.tar.gz install_data
-
-      - name: Upload workspace
-        uses: actions/upload-artifact@v7
-        if: failure()
-        with:
-          name: PHP-${{ inputs.php-version-base }}-Linux-workspace-PM${{ inputs.pm-version-major }}
-          path: |
-            workspace.tar.gz
+            ./PHP-${{ inputs.php-version-base }}-Linux-${{ matrix.arch }}-PM${{ inputs.pm-version-major }}.tar.gz
+            ./PHP-${{ inputs.php-version-base }}-Linux-${{ matrix.arch }}-PM${{ inputs.pm-version-major }}-hosting.tar.gz
           if-no-files-found: error
 
   macos:
-    name: MacOS ${{ matrix.artifact-name }}
-    runs-on: ${{ matrix.image }}
+    name: MacOS ${{ matrix.arch }}
+    runs-on: ${{ matrix.runner }}
     strategy:
+      fail-fast: false
       matrix:
         include:
-          - target-name: mac-x86-64
-            artifact-name: x86_64
-            image: macos-15-intel
-          - target-name: mac-arm64
-            artifact-name: arm64
-            image: macos-15
+          - target: mac-x86-64
+            arch: x86_64
+            runner: macos-15-intel
+          - target: mac-arm64
+            arch: arm64
+            runner: macos-15
 
     steps:
       - uses: actions/checkout@v7
-      
-      - name: Install tools and dependencies
+
+      - name: Install build dependencies
         run: |
-          #workaround github actions default image providing outdated pkg-config
           brew uninstall --ignore-dependencies --force pkg-config@0.29.2 || true
           brew install libtool autoconf automake pkg-config bison re2c
 
-      - name: Prepare compile.sh download cache
-        id: download-cache
+      - name: Cache source downloads
         uses: actions/cache@v6
         with:
           path: ./download_cache
-          key: compile-sh-cache-ssl-https-${{ hashFiles('./compile.sh') }}
-          restore-keys: compile-sh-cache-ssl-https-
+          key: compile-sh-downloads-${{ hashFiles('./compile.sh') }}
+          restore-keys: compile-sh-downloads-
 
       - name: Compile PHP
         run: |
-          export PATH="/usr/local/opt/bison/bin:$PATH"
-          set -ex
-          trap "exit 1" ERR
-          ./compile.sh -t ${{ matrix.target-name }} -j4 -g -P ${{ inputs.pm-version-major }} -c ./download_cache -D -z ${{ inputs.php-version-base }}
-          
-      - name: Create tarball
+          export PATH="/usr/local/opt/bison/bin:/opt/homebrew/opt/bison/bin:$PATH"
+          set -euxo pipefail
+          ./compile.sh \
+            -t "${{ matrix.target }}" \
+            -j 4 \
+            -g \
+            -P "${{ inputs.pm-version-major }}" \
+            -c ./download_cache \
+            -z "${{ inputs.php-version-base }}"
+
+      - name: Package
         run: |
-          tar -czf ./PHP-${{ inputs.php-version-base }}-MacOS-${{ matrix.artifact-name }}-PM${{ inputs.pm-version-major }}.tar.gz bin
-          tar -czf ./Z-PHP-${{ inputs.php-version-base }}-MacOS-${{ matrix.artifact-name }}-PM${{ inputs.pm-version-major }}-debugging-symbols.tar.gz bin-debug
-        
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v7
-        if: always()
-        with:
-          name: PHP-${{ inputs.php-version-base }}-MacOS-${{ matrix.artifact-name }}-PM${{ inputs.pm-version-major }}
-          path: |
-            ./*PHP-${{ inputs.php-version-base }}-MacOS-${{ matrix.artifact-name}}-PM${{ inputs.pm-version-major }}*.tar.gz
-            install.log
-            compile.sh
-          if-no-files-found: error
+          tar -czf "PHP-${{ inputs.php-version-base }}-MacOS-${{ matrix.arch }}-PM${{ inputs.pm-version-major }}.tar.gz" bin
 
-      - name: Prepare workspace for upload
-        if: failure()
-        run: tar -czf workspace.tar.gz install_data
-
-      - name: Upload workspace
+      - name: Upload MacOS binary
         uses: actions/upload-artifact@v7
-        if: failure()
         with:
-          name: PHP-${{ inputs.php-version-base }}-MacOS-${{ matrix.artifact-name }}-workspace-PM${{ inputs.pm-version-major }}
-          path: |
-            workspace.tar.gz
+          name: PHP-${{ inputs.php-version-base }}-MacOS-${{ matrix.arch }}-PM${{ inputs.pm-version-major }}
+          path: ./PHP-${{ inputs.php-version-base }}-MacOS-${{ matrix.arch }}-PM${{ inputs.pm-version-major }}.tar.gz
           if-no-files-found: error
 
   windows:
-    name: Windows
+    name: Windows x64
     runs-on: windows-2022
 
     steps:
       - uses: actions/checkout@v7
 
-      - name: Prepare download cache
-        id: download-cache
+      - name: Cache source downloads
         uses: actions/cache@v6
         with:
           path: ./download_cache
-          key: windows-cache-${{ hashFiles('./windows-compile-vs.ps1') }}
-          restore-keys: windows-cache-
+          key: windows-downloads-${{ hashFiles('./windows-compile-vs.ps1') }}
+          restore-keys: windows-downloads-
 
       - name: Compile PHP
         run: .\windows-compile-vs.ps1
@@ -283,28 +219,23 @@ jobs:
           PM_VERSION_MAJOR: ${{ inputs.pm-version-major }}
           PHP_VERSION_BASE: ${{ inputs.php-version-base }}
 
-      - name: Prepare artifacts
+      - name: Package
+        shell: pwsh
         run: |
-          mkdir temp
-          Compress-Archive -Path .\bin -DestinationPath "PHP-${{ inputs.php-version-base }}-Windows-x64-PM${{ inputs.pm-version-major }}.zip"
-          move php-debug-pack-*.zip temp/Z-PHP-${{ inputs.php-version-base }}-Windows-x64-PM${{ inputs.pm-version-major }}-debugging-symbols.zip
-          move temp\*.zip .
+          Compress-Archive `
+            -Path .\bin `
+            -DestinationPath "PHP-${{ inputs.php-version-base }}-Windows-x64-PM${{ inputs.pm-version-major }}.zip"
 
-      - name: Upload artifacts
+      - name: Upload Windows binary
         uses: actions/upload-artifact@v7
-        if: always()
         with:
-          name: PHP-${{ inputs.php-version-base }}-Windows-PM${{ inputs.pm-version-major }}
-          path: |
-            *PHP-${{ inputs.php-version-base }}-Windows-x64-PM${{ inputs.pm-version-major }}*.zip
-            compile.log
-            windows-compile-vs.ps1
+          name: PHP-${{ inputs.php-version-base }}-Windows-x64-PM${{ inputs.pm-version-major }}
+          path: ./PHP-${{ inputs.php-version-base }}-Windows-x64-PM${{ inputs.pm-version-major }}.zip
           if-no-files-found: error
-
 
   publish:
     name: Publish binaries
-    needs: [linux, macos, windows, android]
+    needs: [linux, macos, windows]
     runs-on: ubuntu-22.04
     if: ${{ github.ref_name == 'stable' && github.ref_type == 'branch' && !contains(github.event.head_commit.message, '[no release]') }}
     concurrency: release-${{ inputs.php-version-base }}-pm${{ inputs.pm-version-major }}
@@ -315,55 +246,46 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - name: Update latest tag target
+      - name: Update latest tags
         run: |
-          git tag -f pm${{ inputs.pm-version-major }}-php-${{ inputs.php-version-base }}-latest
-          git push -f origin pm${{ inputs.pm-version-major }}-php-${{ inputs.php-version-base }}-latest
-          git tag -f pm${{ inputs.pm-version-major }}-latest
-          git push -f origin pm${{ inputs.pm-version-major }}-latest
+          git tag -f "pm${{ inputs.pm-version-major }}-php-${{ inputs.php-version-base }}-latest"
+          git push -f origin "pm${{ inputs.pm-version-major }}-php-${{ inputs.php-version-base }}-latest"
+          git tag -f "pm${{ inputs.pm-version-major }}-latest"
+          git push -f origin "pm${{ inputs.pm-version-major }}-latest"
 
-      - name: Download artifacts
+      - name: Download build artifacts
         uses: actions/download-artifact@v8
         with:
           path: ${{ github.workspace }}
           pattern: "*PHP-${{ inputs.php-version-base }}-*-PM${{ inputs.pm-version-major }}"
 
-      - name: Download .gdbinit for this PHP version
-        run: |
-          curl -L https://raw.githubusercontent.com/php/php-src/refs/heads/PHP-${{ inputs.php-version-base }}/.gdbinit -o Z-PHP-${{ inputs.php-version-base }}.gdbinit
-
-      - name: Upload .gdbinit artifact
-        uses: actions/upload-artifact@v7
-        with:
-          name: PHP-${{ inputs.php-version-base }}.gdbinit
-          path: |
-            ${{ github.workspace }}/*.gdbinit
-
       - name: Generate release notes
         run: |
-          echo "### PHP ${{ inputs.php-version-base }} for PocketMine-MP ${{ inputs.pm-version-major }}.x" > changelog.md
-          echo "Last updated on **$(date -u +'%d %b %Y at %H:%M:%S %Z')**" >> changelog.md
-          echo -e "\n\n" >> changelog.md
-          echo "Built by: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" >> changelog.md
-          echo "Build number: ${{ github.run_number }}" >> changelog.md
-          echo -e "\n\n\n" >> changelog.md
-          echo ":information_source: **Linux/MacOS users**: Please see [this page](https://doc.pmmp.io/en/rtfd/faq/installation/opcache.so.html) to fix extension loading errors. Also, check out the [PocketMine-MP Linux/MacOS installer](https://doc.pmmp.io/en/rtfd/installation/get-dot-pmmp-dot-io.html)." >> changelog.md
-          echo ':package: **Game hosting / panel users**: If you cannot use SSH or your host/file manager does not preserve Linux symbolic links, use the `-hosting.tar.gz` Linux build. It contains real files instead of symlinks and avoids shared-library errors such as `file too short`.' >> changelog.md
-          echo ":warning: **Windows users**: Don't forget to install [Visual C++ Redistributable](https://aka.ms/vs/17/release/vc_redist.x64.exe) or the binary will not work!" >> changelog.md
-          echo -e "\n\n\n" >> changelog.md
+          {
+            echo "### PHP ${{ inputs.php-version-base }} for PocketMine-MP ${{ inputs.pm-version-major }}.x"
+            echo
+            echo "Last updated on **$(date -u +'%d %b %Y at %H:%M:%S %Z')**"
+            echo
+            echo "Built by: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+            echo "Build number: ${{ github.run_number }}"
+            echo
+            echo ':information_source: **Linux users**: Choose `x86_64` or `arm64` based on the CPU architecture of the server that will run PHP, not the phone/PC used to upload the files.'
+            echo ':package: **Game hosting / panel users**: Use the matching `-hosting.tar.gz` Linux build if your host/file manager does not preserve Unix symbolic links.'
+            echo ":information_source: **Linux/MacOS users**: See [this page](https://doc.pmmp.io/en/rtfd/faq/installation/opcache.so.html) for extension loading errors."
+            echo ":warning: **Windows users**: Install [Visual C++ Redistributable](https://aka.ms/vs/17/release/vc_redist.x64.exe) or the binary will not work."
+            echo
+          } > changelog.md
 
           if [[ "${{ inputs.special-release }}" != "none" ]]; then
             echo ":white_check_mark: At the time of publication, this version is recommended for PocketMine-MP ${{ inputs.pm-version-major }}.x production servers." >> changelog.md
           else
-            echo ":warning: WARNING! :warning:" >> changelog.md
-            echo "At the time of publication, plugins for PocketMine-MP ${{ inputs.pm-version-major }}.x may not work this PHP version." >> changelog.md
-            echo "If you have problems, try the [recommended PM${{ inputs.pm-version-major }} release](${{ github.server_url }}/${{ github.repository }}/releases/pm${{ inputs.pm-version-major }}-latest) instead." >> changelog.md
+            echo ":warning: At the time of publication, plugins for PocketMine-MP ${{ inputs.pm-version-major }}.x may not work with this PHP version." >> changelog.md
+            echo "If you have problems, try the [recommended PM${{ inputs.pm-version-major }} release](${{ github.server_url }}/${{ github.repository }}/releases/pm${{ inputs.pm-version-major }}-latest)." >> changelog.md
           fi
 
       - name: Get date
         id: date
-        run: |
-          echo DATE=$(date -u +'%d %b %Y') >> $GITHUB_OUTPUT
+        run: echo "DATE=$(date -u +'%d %b %Y')" >> "$GITHUB_OUTPUT"
 
       - name: Update recommended PM release
         uses: ncipollo/release-action@v1.21.0
@@ -371,8 +293,7 @@ jobs:
         with:
           artifacts: |
             ${{ github.workspace }}/*PHP-*-PM*/*.tar.gz
-            ${{ github.workspace }}/*PHP-*-Windows-PM*/*.zip
-            ${{ github.workspace }}/*.gdbinit
+            ${{ github.workspace }}/*PHP-*-Windows-*-PM*/*.zip
           name: PM ${{ inputs.pm-version-major }}.x (${{ steps.date.outputs.DATE }}) - Recommended
           tag: pm${{ inputs.pm-version-major }}-latest
           commit: ${{ github.sha }}
@@ -382,13 +303,12 @@ jobs:
           makeLatest: ${{ inputs.special-release == 'default-latest' }}
           prerelease: ${{ inputs.pm-preview == true }}
 
-      - name: Update php-version PM release
+      - name: Update PHP-version PM release
         uses: ncipollo/release-action@v1.21.0
         with:
           artifacts: |
             ${{ github.workspace }}/*PHP-*-PM*/*.tar.gz
-            ${{ github.workspace }}/*PHP-*-Windows-PM*/*.zip
-            ${{ github.workspace }}/*.gdbinit
+            ${{ github.workspace }}/*PHP-*-Windows-*-PM*/*.zip
           name: PM ${{ inputs.pm-version-major }}.x (${{ steps.date.outputs.DATE }}) - PHP ${{ inputs.php-version-base }}
           tag: pm${{ inputs.pm-version-major }}-php-${{ inputs.php-version-base }}-latest
           commit: ${{ github.sha }}

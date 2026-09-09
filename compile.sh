@@ -404,6 +404,16 @@ else
 		GMP_ABI="64"
 		OPENSSL_TARGET="linux-x86_64"
 		write_out "INFO" "Compiling for Linux x86_64"
+	elif [[ "$COMPILE_TARGET" == "linux-arm64" ]] || [[ "$COMPILE_TARGET" == "linux-aarch64" ]]; then
+		if [[ "$(uname -s)" != "Linux" ]] || { [[ "$(uname -m)" != "aarch64" ]] && [[ "$(uname -m)" != "arm64" ]]; }; then
+			write_error "linux-arm64 must be built natively on an ARM64 Linux host"
+			exit 1
+		fi
+		[ -z "$march" ] && march=armv8-a;
+		[ -z "$mtune" ] && mtune=generic;
+		GMP_ABI="64"
+		OPENSSL_TARGET="linux-aarch64"
+		write_out "INFO" "Compiling for Linux ARM64 (AArch64)"
 	elif [[ "$COMPILE_TARGET" == "mac-x86-64" ]]; then
 		[ -z "$march" ] && march=core2;
 		[ -z "$mtune" ] && mtune=generic;
@@ -434,7 +444,7 @@ else
 		CMAKE_GLOBAL_EXTRA_FLAGS="-DCMAKE_OSX_ARCHITECTURES=arm64"
 		write_out "INFO" "Compiling for MacOS M1"
 	elif [[ "$COMPILE_TARGET" != "" ]]; then
-		write_error "Please supply a proper platform [mac-arm64 mac-x86-64 linux linux64] to compile for"
+		write_error "Please supply a proper platform [mac-arm64 mac-x86-64 linux linux64 linux-arm64] to compile for"
 		exit 1
 	elif [ -z "$CFLAGS" ]; then
 		if [ `getconf LONG_BIT` == "64" ]; then

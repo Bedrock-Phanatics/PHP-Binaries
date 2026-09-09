@@ -21,7 +21,7 @@ jobs:
         include:
           - pm-version-major: 5
             php-version-base: "8.4"
-            special-release: default-latest #default = best for PM5, latest = display as latest on GitHub
+            special-release: default-latest
 
     uses: ./.github/workflows/main-pm-matrix.yml
     with:
@@ -47,21 +47,21 @@ jobs:
 
       - name: Generate release notes
         run: |
-          echo "Built by: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" >> changelog.md
-          echo "Build number: ${{ github.run_number }}" >> changelog.md
-          echo -e "\n\n\n" >> changelog.md
-          echo ":information_source: **Linux/MacOS users**: Please see [this page](https://doc.pmmp.io/en/rtfd/faq/installation/opcache.so.html) to fix extension loading errors. Also, check out the [PocketMine-MP Linux/MacOS installer](https://doc.pmmp.io/en/rtfd/installation/get-dot-pmmp-dot-io.html)." >> changelog.md
-          echo ":warning: **Windows users**: Don't forget to install [Visual C++ Redistributable](https://aka.ms/vs/17/release/vc_redist.x64.exe) or the binary will not work!" >> changelog.md
-          echo -e "\n\n\n" >> changelog.md
+          {
+            echo "Built by: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+            echo "Build number: ${{ github.run_number }}"
+            echo
+            echo ':information_source: **Linux users**: Choose `x86_64` or `arm64` based on the CPU architecture of the server that runs PHP.'
+            echo ':package: **Game hosting / panel users**: Use the matching `-hosting.tar.gz` build if your host/file manager does not preserve Unix symbolic links.'
+            echo ":warning: **Windows users**: Install [Visual C++ Redistributable](https://aka.ms/vs/17/release/vc_redist.x64.exe) or the binary will not work."
+          } > changelog.md
 
-      - name: Create release
+      - name: Create archive release
         uses: ncipollo/release-action@v1.21.0
         with:
           artifacts: |
             ${{ github.workspace }}/*PHP-*-PM*/*.tar.gz
-            ${{ github.workspace }}/*PHP-*-Windows-PM*/*.zip
-            ${{ github.workspace }}/*PHP-*.gdbinit/*.gdbinit
-
+            ${{ github.workspace }}/*PHP-*-Windows-*-PM*/*.zip
           name: PHP (Build ${{ github.run_number }}) - Archive
           tag: php-build-${{ github.run_number }}
           commit: ${{ github.sha }}
