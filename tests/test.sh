@@ -1,35 +1,51 @@
-#!/bin/bash
+#!/usr/bin/env bash
+set -u
 
-export PHP_BINARIES="$2"
-chmod +x "$PHP_BINARIES"
-DIR="$(cd -P "$( dirname "${BASH_SOURCE[0]}" )" && pwd)"
-export TEST_DIR="$DIR/$1/"
+if [ "$#" -ne 2 ]; then
+	echo "Usage: $0 <suite> <php binary>" >&2
+	exit 2
+fi
 
-TEST_NUMBER=("$TEST_DIR"*)
-TEST_NUMBER=${#TEST_NUMBER[@]}
+DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+TEST_DIR="$DIR/$1"
+PHP_BINARIES="$2"
 
-set +e
+if [ ! -d "$TEST_DIR" ] || [ ! -x "$PHP_BINARIES" ]; then
+	echo "Test suite or PHP binary is missing" >&2
+	exit 2
+fi
 
-INCREMENT=0
-FAILED=0
+PHP_BINARIES="$(cd "$(dirname "$PHP_BINARIES")" && pwd)/$(basename "$PHP_BINARIES")"
+export PHP_BINARIES
+php_dir="$(dirname "$PHP_BINARIES")"
+php_args=(-c "$php_dir/php.ini")
+if [[ "$PHP_BINARIES" != *.exe ]]; then
+	opcache="$(find "$php_dir/../lib/php/extensions" -name opcache.so -print -quit)"
+	if [ -z "$opcache" ]; then
+		echo "OPcache library is missing" >&2
+		exit 2
+	fi
+	php_args+=(-d "extension_dir=$(dirname "$opcache")")
+fi
 
-cd "$TEST_DIR"
-echo "Doing tests on $TEST_DIR"
+shopt -s nullglob
+tests=("$TEST_DIR"/*.php "$TEST_DIR"/*.sh)
+if [ "${#tests[@]}" -eq 0 ]; then
+	echo "No tests found in $TEST_DIR" >&2
+	exit 2
+fi
 
-for f in *; do
-	INCREMENT=$((INCREMENT+1))
-	echo -n "[$INCREMENT/$TEST_NUMBER] $f ... "
-	chmod +x "$f"
-	"./$f"
-	STATUS=$?
-	if [ $STATUS != 0 ]; then
-		echo "FAILED!"
-		FAILED=$((FAILED+1))
+failed=0
+for test in "${tests[@]}"; do
+	echo "Running $(basename "$test")"
+	if [[ "$test" == *.php ]]; then
+		"$PHP_BINARIES" "${php_args[@]}" "$test" || failed=$((failed + 1))
 	else
-		echo "OK"
+		bash "$test" || failed=$((failed + 1))
 	fi
 done
 
-echo "Ran $INCREMENT tests, $FAILED failed."
-
-exit 0
+echo "Ran ${#tests[@]} tests, $failed failed."
+if [ "$failed" -ne 0 ]; then
+	exit 1
+fi

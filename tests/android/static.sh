@@ -1,9 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
+set -euo pipefail
 
-OUTPUT=$(readelf -d "$PHP_BINARIES/bin/php")
-
-if [ "$OUTPUT" != "There is no dynamic section in this file." ]; then
-	exit 1
-fi
-
-exit 0
+readelf -d "$PHP_BINARIES" | grep -q 'There is no dynamic section'
