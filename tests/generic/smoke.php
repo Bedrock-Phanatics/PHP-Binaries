@@ -19,7 +19,12 @@ check(PHP_INT_SIZE === 8, '64-bit PHP required');
 check(PHP_ZTS, 'ZTS required');
 check(php_ini_loaded_file() !== false, 'php.ini was not loaded');
 
-foreach(['pmmpthread', 'Zend OPcache', 'curl', 'openssl', 'yaml', 'leveldb', 'chunkutils2', 'igbinary', 'crypto', 'libdeflate', 'encoding', 'snappy', 'morton', 'xxhash', 'fileinfo', 'gd', 'mysqli', 'recursionguard'] as $extension){
+foreach([
+	'chunkutils2', 'crypto', 'ctype', 'curl', 'date', 'encoding', 'gmp', 'hash',
+	'igbinary', 'json', 'leveldb', 'mbstring', 'morton', 'openssl', 'pcre', 'Phar',
+	'pmmpthread', 'Reflection', 'SimpleXML', 'sockets', 'SPL', 'yaml', 'zip', 'zlib',
+	'Zend OPcache', 'libdeflate', 'snappy', 'xxhash', 'fileinfo', 'gd', 'mysqli', 'recursionguard',
+] as $extension){
 	check(extension_loaded($extension), "$extension is missing");
 }
 if(PHP_OS_FAMILY === 'Windows'){

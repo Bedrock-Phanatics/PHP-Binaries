@@ -65,6 +65,7 @@ jobs:
             -z "${{ inputs.php-version-base }}"
 
       - name: Validate and package
+        timeout-minutes: 10
         run: |
           set -euo pipefail
 
@@ -95,7 +96,14 @@ jobs:
               ;;
           esac
 
-          "$PHP_BINARY" -v
+          if ldd "$PHP_BINARY" | grep -q 'not found'; then
+            echo "::error::PHP has missing shared libraries"
+            ldd "$PHP_BINARY"
+            exit 1
+          fi
+
+          bash tests/test.sh generic "$PHP_BINARY"
+          USE_ZEND_ALLOC=0 MALLOC_CHECK_=3 MALLOC_PERTURB_=165 bash tests/test.sh generic "$PHP_BINARY"
 
           # Standard Linux archive: preserves Unix symbolic links.
           tar -czf "$NORMAL_ARCHIVE" bin
@@ -131,8 +139,16 @@ jobs:
               ;;
           esac
 
-          "$HOSTING_PHP" -v
           tar -C hosting-root -czf "$HOSTING_ARCHIVE" bin
+
+          mkdir -p package-check/normal package-check/hosting
+          tar -xzf "$NORMAL_ARCHIVE" -C package-check/normal
+          tar -xzf "$HOSTING_ARCHIVE" -C package-check/hosting
+          bash tests/test.sh generic package-check/normal/bin/php7/bin/php
+          bash tests/test.sh generic package-check/hosting/bin/php7/bin/php
+
+          OPCACHE="$(find bin/php7/lib/php/extensions -name opcache.so -print -quit)"
+          "$PHP_BINARY" -c bin/php7/bin/php.ini -d "extension_dir=$(dirname "$OPCACHE")" benchmarks/baseline.php > benchmark.json
 
           echo "Created:"
           ls -lh "$NORMAL_ARCHIVE" "$HOSTING_ARCHIVE"
@@ -144,6 +160,7 @@ jobs:
           path: |
             ./PHP-${{ inputs.php-version-base }}-Linux-${{ matrix.arch }}-PM${{ inputs.pm-version-major }}.tar.gz
             ./PHP-${{ inputs.php-version-base }}-Linux-${{ matrix.arch }}-PM${{ inputs.pm-version-major }}-hosting.tar.gz
+            ./benchmark.json
           if-no-files-found: error
 
   macos:
@@ -187,15 +204,34 @@ jobs:
             -c ./download_cache \
             -z "${{ inputs.php-version-base }}"
 
-      - name: Package
+      - name: Validate and package
+        timeout-minutes: 10
         run: |
-          tar -czf "PHP-${{ inputs.php-version-base }}-MacOS-${{ matrix.arch }}-PM${{ inputs.pm-version-major }}.tar.gz" bin
+          set -euo pipefail
+          PHP_BINARY="bin/php7/bin/php"
+          test -x "$PHP_BINARY"
+          file "$PHP_BINARY"
+          case "${{ matrix.arch }}" in
+            x86_64) file "$PHP_BINARY" | grep -q x86_64 ;;
+            arm64) file "$PHP_BINARY" | grep -q arm64 ;;
+          esac
+          bash tests/test.sh generic "$PHP_BINARY"
+          USE_ZEND_ALLOC=0 MallocScribble=1 bash tests/test.sh generic "$PHP_BINARY"
+          ARCHIVE="PHP-${{ inputs.php-version-base }}-MacOS-${{ matrix.arch }}-PM${{ inputs.pm-version-major }}.tar.gz"
+          tar -czf "$ARCHIVE" bin
+          mkdir package-check
+          tar -xzf "$ARCHIVE" -C package-check
+          bash tests/test.sh generic package-check/bin/php7/bin/php
+          OPCACHE="$(find bin/php7/lib/php/extensions -name opcache.so -print -quit)"
+          "$PHP_BINARY" -c bin/php7/bin/php.ini -d "extension_dir=$(dirname "$OPCACHE")" benchmarks/baseline.php > benchmark.json
 
       - name: Upload MacOS binary
         uses: actions/upload-artifact@v7
         with:
           name: PHP-${{ inputs.php-version-base }}-MacOS-${{ matrix.arch }}-PM${{ inputs.pm-version-major }}
-          path: ./PHP-${{ inputs.php-version-base }}-MacOS-${{ matrix.arch }}-PM${{ inputs.pm-version-major }}.tar.gz
+          path: |
+            ./PHP-${{ inputs.php-version-base }}-MacOS-${{ matrix.arch }}-PM${{ inputs.pm-version-major }}.tar.gz
+            ./benchmark.json
           if-no-files-found: error
 
   windows:
@@ -219,18 +255,39 @@ jobs:
           PM_VERSION_MAJOR: ${{ inputs.pm-version-major }}
           PHP_VERSION_BASE: ${{ inputs.php-version-base }}
 
-      - name: Package
+      - name: Validate and package
+        timeout-minutes: 10
         shell: pwsh
         run: |
+          $php = (Resolve-Path .\bin\php\php.exe).Path
+          if ((& $php -r 'echo php_uname("m");') -notmatch 'AMD64|x86_64') { throw "Expected Windows x64 PHP" }
+          & $php -c .\bin\php\php.ini .\tests\generic\smoke.php
+          if ($LASTEXITCODE -ne 0) { throw "PHP smoke tests failed" }
+          $env:USE_ZEND_ALLOC = '0'
+          & $php -c .\bin\php\php.ini .\tests\generic\smoke.php
+          if ($LASTEXITCODE -ne 0) { throw "PHP allocator smoke tests failed" }
+          Remove-Item Env:USE_ZEND_ALLOC
+
+          & $php -c .\bin\php\php.ini .\benchmarks\baseline.php > benchmark.json
+          if ($LASTEXITCODE -ne 0) { throw "PHP benchmarks failed" }
+
           Compress-Archive `
             -Path .\bin `
             -DestinationPath "PHP-${{ inputs.php-version-base }}-Windows-x64-PM${{ inputs.pm-version-major }}.zip"
+
+          Expand-Archive `
+            -Path "PHP-${{ inputs.php-version-base }}-Windows-x64-PM${{ inputs.pm-version-major }}.zip" `
+            -DestinationPath .\package-check
+          & .\package-check\bin\php\php.exe -c .\package-check\bin\php\php.ini .\tests\generic\smoke.php
+          if ($LASTEXITCODE -ne 0) { throw "Packaged PHP smoke tests failed" }
 
       - name: Upload Windows binary
         uses: actions/upload-artifact@v7
         with:
           name: PHP-${{ inputs.php-version-base }}-Windows-x64-PM${{ inputs.pm-version-major }}
-          path: ./PHP-${{ inputs.php-version-base }}-Windows-x64-PM${{ inputs.pm-version-major }}.zip
+          path: |
+            ./PHP-${{ inputs.php-version-base }}-Windows-x64-PM${{ inputs.pm-version-major }}.zip
+            ./benchmark.json
           if-no-files-found: error
 
   publish:

@@ -12,6 +12,14 @@ If your host or file manager does not preserve Linux symbolic (and you can't use
 
 Delete your existing `bin/` folder, then extract or upload the new `bin/` folder into your server root. Use the normal Linux build for standard Linux/SSH installations.
 
+### Validation and benchmarks
+
+CI checks the Quark v6 PHP runtime requirements: PHP 8.4+, ZTS, required extensions, OPcache, thread and worker lifecycles, synchronized work, and clean shutdown on Linux x86_64/ARM64, macOS x86_64/ARM64, and Windows x64. It repeats the checks after extracting each archive. A failed check blocks artifact upload and releases.
+
+On Linux or macOS, run `bash tests/test.sh generic bin/php7/bin/php`. On Windows, run `bin\php\php.exe -c bin\php\php.ini tests\generic\smoke.php`.
+
+`benchmarks/baseline.php` records seven samples each for PHP process startup, a fixed one-million-iteration CPU loop, and eight worker start/shutdown cycles. It also reports PHP allocated memory at startup and peak use. CI saves each build's `benchmark.json` with its archive. These measurements are baselines, not release thresholds.
+
 ## compile.sh
 
 Bash script used to compile PHP on MacOS and Linux platforms. Make sure you have ``make autoconf automake libtool m4 wget getconf gzip bzip2 bison g++ git cmake pkg-config re2c ca-certificates``.
