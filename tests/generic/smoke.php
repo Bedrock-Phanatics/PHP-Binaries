@@ -37,7 +37,7 @@ check(is_array($opcache) && $opcache['opcache_enabled'], 'OPcache failed to init
 check(!($opcache['jit']['enabled'] ?? false) && ($opcache['jit']['buffer_size'] ?? 0) === 0, 'JIT memory is allocated');
 check(curl_init() instanceof CurlHandle, 'curl failed to initialize');
 check(version_compare(curl_version()['version'], '8.23.0', '>='), 'libcurl is outdated');
-check(OPENSSL_VERSION_NUMBER >= 0x30509000, 'OpenSSL is outdated');
+check(OPENSSL_VERSION_NUMBER >= 0x30500090, 'OpenSSL is outdated');
 check(Thread::getRunningCount() === 0, 'Threads are running before the test');
 
 final class Counter extends ThreadSafe{
