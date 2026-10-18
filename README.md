@@ -1,10 +1,10 @@
 # PHP binaries & PHP build scripts for PocketMine-MP
-[![Build status](https://github.com/pmmp/php-build-scripts/actions/workflows/main.yml/badge.svg)](https://github.com/pmmp/php-build-scripts/actions/workflows/main.yml)
+[![Build status](https://github.com/Bedrock-Phanatics/PHP-Binaries/actions/workflows/main.yml/badge.svg)](https://github.com/Bedrock-Phanatics/PHP-Binaries/actions/workflows/main.yml)
 
 ## Prebuilt binaries
 ### Actively updated "latest" URLs
-- [PM5 default](https://github.com/pmmp/PHP-Binaries/releases/tag/pm5-latest)
-- [PM5 PHP 8.4](https://github.com/pmmp/PHP-Binaries/releases/tag/pm5-php-8.4-latest) (default)
+- [PM5 default](https://github.com/Bedrock-Phanatics/PHP-Binaries/releases/tag/pm5-latest)
+- [PM5 PHP 8.4](https://github.com/Bedrock-Phanatics/PHP-Binaries/releases/tag/pm5-php-8.4-latest) (default)
 
 ### Game hosting
 
@@ -19,6 +19,8 @@ CI checks the Quark v6 PHP runtime requirements: PHP 8.4+, ZTS, required extensi
 On Linux or macOS, run `bash tests/test.sh generic bin/php7/bin/php`. On Windows, run `bin\php\php.exe -c bin\php\php.ini tests\generic\smoke.php`.
 
 `benchmarks/baseline.php` records seven samples each for PHP process startup, a fixed one-million-iteration CPU loop, and eight worker start/shutdown cycles. It also reports PHP allocated memory at startup and peak use. CI saves each build's `benchmark.json` with its archive. These measurements are baselines, not release thresholds.
+
+Build versions are pinned in `versions.env`. `sources.sha256` verifies source archives, and `windows-deps.sha256` locks the official PHP 8.4 Windows dependency packages. Update the version and checksum together when changing a dependency. Download caches are checked before use, and Windows reuses installed dependencies when the lockfiles and build script have not changed.
 
 ## compile.sh
 
@@ -69,7 +71,7 @@ Bash script used to compile PHP on MacOS and Linux platforms. Make sure you have
 ## windows-compile-vs.ps1
 
 Uses Visual Studio toolsets to compile PHP binaries on Windows.
-You need to install `git`, `cmake` and Visual Studio 2019 to use this script.
+You need to install `git`, `cmake` and Visual Studio 2022 to use this script.
 
 This script doesn't accept parameters, but the following environment variables are influential:
 

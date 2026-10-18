@@ -50,8 +50,8 @@ jobs:
         uses: actions/cache@v6
         with:
           path: ./download_cache
-          key: compile-sh-downloads-${{ hashFiles('./compile.sh') }}
-          restore-keys: compile-sh-downloads-
+          key: ${{ runner.os }}-sources-${{ hashFiles('versions.env', 'sources.sha256') }}
+          restore-keys: ${{ runner.os }}-sources-
 
       - name: Compile PHP
         run: |
@@ -68,6 +68,7 @@ jobs:
         timeout-minutes: 10
         run: |
           set -euo pipefail
+          source versions.env
 
           NORMAL_ARCHIVE="PHP-${{ inputs.php-version-base }}-Linux-${{ matrix.arch }}-PM${{ inputs.pm-version-major }}.tar.gz"
           HOSTING_ARCHIVE="PHP-${{ inputs.php-version-base }}-Linux-${{ matrix.arch }}-PM${{ inputs.pm-version-major }}-hosting.tar.gz"
@@ -77,6 +78,7 @@ jobs:
             echo "::error::$PHP_BINARY is missing or not executable"
             exit 1
           fi
+          test "$("$PHP_BINARY" -r 'echo PHP_VERSION;')" = "$PHP_VERSION"
 
           PHP_FILE_INFO="$(file "$PHP_BINARY")"
           echo "$PHP_FILE_INFO"
@@ -189,8 +191,8 @@ jobs:
         uses: actions/cache@v6
         with:
           path: ./download_cache
-          key: compile-sh-downloads-${{ hashFiles('./compile.sh') }}
-          restore-keys: compile-sh-downloads-
+          key: ${{ runner.os }}-sources-${{ hashFiles('versions.env', 'sources.sha256') }}
+          restore-keys: ${{ runner.os }}-sources-
 
       - name: Compile PHP
         run: |
@@ -208,8 +210,10 @@ jobs:
         timeout-minutes: 10
         run: |
           set -euo pipefail
+          source versions.env
           PHP_BINARY="bin/php7/bin/php"
           test -x "$PHP_BINARY"
+          test "$("$PHP_BINARY" -r 'echo PHP_VERSION;')" = "$PHP_VERSION"
           file "$PHP_BINARY"
           case "${{ matrix.arch }}" in
             x86_64) file "$PHP_BINARY" | grep -q x86_64 ;;
@@ -245,8 +249,8 @@ jobs:
         uses: actions/cache@v6
         with:
           path: ./download_cache
-          key: windows-downloads-${{ hashFiles('./windows-compile-vs.ps1') }}
-          restore-keys: windows-downloads-
+          key: ${{ runner.os }}-sources-${{ hashFiles('versions.env', 'sources.sha256', 'windows-deps.sha256') }}
+          restore-keys: ${{ runner.os }}-sources-
 
       - name: Compile PHP
         run: .\windows-compile-vs.ps1
@@ -260,6 +264,8 @@ jobs:
         shell: pwsh
         run: |
           $php = (Resolve-Path .\bin\php\php.exe).Path
+          $expected = ((Get-Content .\versions.env | Select-String '^PHP_VERSION=').ToString().Split('='))[1]
+          if ((& $php -r 'echo PHP_VERSION;') -ne $expected) { throw "Unexpected PHP version" }
           if ((& $php -r 'echo php_uname("m");') -notmatch 'AMD64|x86_64') { throw "Expected Windows x64 PHP" }
           & $php -c .\bin\php\php.ini .\tests\generic\smoke.php
           if ($LASTEXITCODE -ne 0) { throw "PHP smoke tests failed" }

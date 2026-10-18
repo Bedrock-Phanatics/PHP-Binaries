@@ -34,6 +34,8 @@ if(PHP_OS_FAMILY === 'Windows'){
 check(ini_get('opcache.enable_cli') === '1', 'OPcache is disabled for CLI');
 check(is_array(opcache_get_status(false)), 'OPcache failed to initialize');
 check(curl_init() instanceof CurlHandle, 'curl failed to initialize');
+check(version_compare(curl_version()['version'], '8.23.0', '>='), 'libcurl is outdated');
+check(OPENSSL_VERSION_NUMBER >= 0x30509000, 'OpenSSL is outdated');
 check(Thread::getRunningCount() === 0, 'Threads are running before the test');
 
 final class Counter extends ThreadSafe{
