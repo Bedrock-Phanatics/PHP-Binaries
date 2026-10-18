@@ -192,7 +192,6 @@ $CMAKE_TOOLSET_FLAG=""
 pm-echo "Selected PHP $PHP_VER ($PHP_VERSION_ID), SDK target $VC_VER ($SDK_TOOLSET_FLAG), CMake target $CMAKE_TARGET ($CMAKE_TOOLSET_FLAG)"
 
 $PHP_JIT_ENABLE_ARG="yes"
-pm-echo "[WARNING] JIT in PHP 8.4 has not been tested, use it with caution"
 
 if ($env:SOURCES_PATH -ne $null) {
     $BASE_PATH=$env:SOURCES_PATH
@@ -668,7 +667,6 @@ append-file-utf8 "opcache.save_comments=1" $php_ini
 append-file-utf8 "opcache.validate_timestamps=1" $php_ini
 append-file-utf8 "opcache.revalidate_freq=0" $php_ini
 append-file-utf8 "opcache.file_update_protection=0" $php_ini
-append-file-utf8 "opcache.optimization_level=0x7FFEBFFF" $php_ini
 append-file-utf8 "opcache.cache_id=PHP_BINARY ;prevent sharing SHM between different binaries - they won't work because of ASLR" $php_ini
 append-file-utf8 ";Optional extensions, supplied for plugin use" $php_ini
 append-file-utf8 "extension=php_fileinfo.dll" $php_ini
@@ -680,14 +678,8 @@ append-file-utf8 "extension=php_recursionguard.dll" $php_ini
 append-file-utf8 "recursionguard.enabled=0 ;disabled due to minor performance impact, only enable this if you need it for debugging" $php_ini
 append-file-utf8 ";extension=php_arraydebug.dll" $php_ini
 append-file-utf8 "" $php_ini
-if ($PHP_JIT_ENABLE_ARG -eq "yes") {
-    append-file-utf8 "; ---- ! WARNING ! ----" $php_ini
-    append-file-utf8 "; JIT can provide big performance improvements, but it may make your server crash or behave in weird ways. Use it at your own risk." $php_ini
-    append-file-utf8 "; See https://www.php.net/manual/en/opcache.configuration.php#ini.opcache.jit for possible options." $php_ini
-    append-file-utf8 "opcache.jit=off" $php_ini
-    append-file-utf8 "opcache.jit_buffer_size=128M" $php_ini
-    append-file-utf8 "" $php_ini
-}
+append-file-utf8 "opcache.jit=disable" $php_ini
+append-file-utf8 "opcache.jit_buffer_size=0" $php_ini
 append-file-utf8 ";zend_extension=php_xdebug.dll" $php_ini
 append-file-utf8 ";https://xdebug.org/docs/all_settings#mode" $php_ini
 append-file-utf8 "xdebug.mode=off" $php_ini

@@ -32,7 +32,9 @@ if(PHP_OS_FAMILY === 'Windows'){
 }
 
 check(ini_get('opcache.enable_cli') === '1', 'OPcache is disabled for CLI');
-check(is_array(opcache_get_status(false)), 'OPcache failed to initialize');
+$opcache = opcache_get_status(false);
+check(is_array($opcache) && $opcache['opcache_enabled'], 'OPcache failed to initialize');
+check(!($opcache['jit']['enabled'] ?? false) && ($opcache['jit']['buffer_size'] ?? 0) === 0, 'JIT memory is allocated');
 check(curl_init() instanceof CurlHandle, 'curl failed to initialize');
 check(version_compare(curl_version()['version'], '8.23.0', '>='), 'libcurl is outdated');
 check(OPENSSL_VERSION_NUMBER >= 0x30509000, 'OpenSSL is outdated');
@@ -46,6 +48,10 @@ final class CountThread extends Thread{
 	public function __construct(private Counter $counter){}
 
 	public function run(): void{
+		$status = opcache_get_status(false);
+		if(!is_array($status) || !$status['opcache_enabled'] || ($status['jit']['buffer_size'] ?? 0) !== 0){
+			throw new RuntimeException('OPcache failed in a thread');
+		}
 		$this->counter->synchronized(function(): void{
 			++$this->counter->value;
 		});
@@ -56,6 +62,10 @@ final class CountTask extends Runnable{
 	public function __construct(private Counter $counter){}
 
 	public function run(): void{
+		$status = opcache_get_status(false);
+		if(!is_array($status) || !$status['opcache_enabled'] || ($status['jit']['buffer_size'] ?? 0) !== 0){
+			throw new RuntimeException('OPcache failed in a worker');
+		}
 		$this->counter->synchronized(function(): void{
 			++$this->counter->value;
 		});
@@ -67,7 +77,7 @@ for($round = 0; $round < 4; ++$round){
 	$threads = [];
 	for($i = 0; $i < 4; ++$i){
 		$thread = new CountThread($counter);
-		check($thread->start(), 'Thread creation failed');
+		check($thread->start(0), 'Thread creation failed');
 		$threads[] = $thread;
 	}
 	foreach($threads as $thread){
@@ -79,7 +89,7 @@ for($round = 0; $round < 4; ++$round){
 $workers = [];
 for($i = 0; $i < 4; ++$i){
 	$worker = new Worker();
-	check($worker->start(), 'Worker creation failed');
+	check($worker->start(0), 'Worker creation failed');
 	for($task = 0; $task < 8; ++$task){
 		check($worker->stack(new CountTask($counter)) > 0, 'Worker task was not queued');
 	}

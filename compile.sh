@@ -115,7 +115,6 @@ HAVE_VALGRIND="--without-valgrind"
 HAVE_OPCACHE="yes"
 HAVE_XDEBUG="yes"
 FSANITIZE_OPTIONS=""
-FLAGS_LTO=""
 HAVE_OPCACHE_JIT="no"
 
 COMPILE_GD="no"
@@ -132,8 +131,8 @@ while getopts "::t:j:sdDxfgnva:P:c:l:Jiz:" OPTION; do
 
 	case $OPTION in
 		l)
-			mkdir "$OPTARG" 2> /dev/null
-			LIB_BUILD_DIR="$(cd $OPTARG; pwd)"
+			mkdir -p "$OPTARG"
+			LIB_BUILD_DIR="$(cd "$OPTARG" && pwd)"
 			write_out opt "Reusing previously built libraries in $LIB_BUILD_DIR if found"
 			write_out WARNING "Reusing previously built libraries may break if different args were used!"
 			;;
@@ -251,9 +250,6 @@ fi
 
 PHP_VERSION_ID=$(php_version_id "$PHP_VERSION")
 write_out "opt" "Selected PHP $PHP_VERSION ($PHP_VERSION_ID)"
-
-HAVE_OPCACHE_JIT="yes"
-write_out "WARNING" "JIT in PHP 8.4 may be unstable, use it with caution"
 
 #Needed to use aliases
 shopt -s expand_aliases
@@ -418,13 +414,23 @@ else
 	elif [[ "$COMPILE_TARGET" != "" ]]; then
 		write_error "Please supply a proper platform [mac-arm64 mac-x86-64 linux linux64 linux-arm64] to compile for"
 		exit 1
-	elif [ -z "$CFLAGS" ]; then
+	elif [ -z "$COMPILE_TARGET" ]; then
 		if [ `getconf LONG_BIT` == "64" ]; then
 			COMPILE_TARGET="linux64"
 			write_out "INFO" "Compiling for current machine using 64-bit"
-			if [ "$(uname -m)" != "aarch64" ]; then
+			if [[ "$(uname -m)" == "aarch64" ]] || [[ "$(uname -m)" == "arm64" ]]; then
+				COMPILE_TARGET="linux-arm64"
+				[ -z "$march" ] && march=armv8-a
+				OPENSSL_TARGET="linux-aarch64"
+			elif [ "$(uname -m)" == "x86_64" ]; then
+				[ -z "$march" ] && march=x86-64
+				OPENSSL_TARGET="linux-x86_64"
 				CFLAGS="-m64 $CFLAGS"
+			else
+				write_error "Unsupported architecture $(uname -m)"
+				exit 1
 			fi
+			[ -z "$mtune" ] && mtune=generic
 			GMP_ABI="64"
 		else
 			write_out "ERROR" "PocketMine-MP is no longer supported on 32-bit systems"
@@ -469,8 +475,8 @@ if [ -z "$THREADS" ]; then
 	write_out "WARNING" "Only 1 thread is used by default. Increase thread count using -j (e.g. -j 4) to compile faster."	
 	THREADS=1;
 fi
-[ -z "$march" ] && march=native;
-[ -z "$mtune" ] && mtune=native;
+[ -z "$march" ] && march=x86-64;
+[ -z "$mtune" ] && mtune=generic;
 [ -z "$CFLAGS" ] && CFLAGS="";
 
 if [ "$DO_STATIC" == "no" ]; then
@@ -492,20 +498,15 @@ else
 fi
 
 if [ "$DO_OPTIMIZE" != "no" ]; then
-	#FLAGS_LTO="-fvisibility=hidden -flto"
-	CFLAGS="$CFLAGS -O2"
-	GENERIC_CFLAGS="-ftree-vectorize -fomit-frame-pointer"
-	$CC $CFLAGS $GENERIC_CFLAGS -o test test.c >> "$DIR/install.log" 2>&1
-	if [ $? -eq 0 ]; then
-		CFLAGS="$CFLAGS $GENERIC_CFLAGS"
-	fi
-	#clang does not understand the following and will fail
-	GCC_CFLAGS="-funsafe-loop-optimizations -fpredictive-commoning -ftracer -ftree-loop-im -frename-registers -fcx-limited-range -funswitch-loops -fivopts -fno-gcse"
-	$CC $CFLAGS $GCC_CFLAGS -o test test.c >> "$DIR/install.log" 2>&1
-	if [ $? -eq 0 ]; then
-		CFLAGS="$CFLAGS $GCC_CFLAGS"
-	fi
-	#TODO: -ftree-parallelize-loops requires OpenMP - not sure if it will provide meaningful improvements yet
+	case "${PHP_BUILD_OPTIMIZATION:-O2}" in
+		O2) CFLAGS="$CFLAGS -O2" ;;
+		O3) CFLAGS="$CFLAGS -O3" ;;
+		O2-lto)
+			CFLAGS="$CFLAGS -O2 -flto"
+			LDFLAGS="$LDFLAGS -flto"
+			;;
+		*) write_error "Unsupported PHP_BUILD_OPTIMIZATION"; exit 1 ;;
+	esac
 fi
 
 if [ "$FSANITIZE_OPTIONS" != "" ]; then
@@ -1218,7 +1219,7 @@ if [ "$FSANITIZE_OPTIONS" != "" ]; then
 	LDFLAGS="-fsanitize=$FSANITIZE_OPTIONS $LDFLAGS"
 fi
 
-RANLIB=$RANLIB CFLAGS="$CFLAGS $FLAGS_LTO" CXXFLAGS="$CXXFLAGS $FLAGS_LTO" LDFLAGS="$LDFLAGS $FLAGS_LTO" ./configure $PHP_OPTIMIZATION --prefix="$INSTALL_DIR" \
+RANLIB=$RANLIB CFLAGS="$CFLAGS" CXXFLAGS="$CXXFLAGS" LDFLAGS="$LDFLAGS" ./configure $PHP_OPTIMIZATION --prefix="$INSTALL_DIR" \
 --exec-prefix="$INSTALL_DIR" \
 --with-curl \
 --with-zlib \
@@ -1356,15 +1357,8 @@ if [ "$HAVE_OPCACHE" == "yes" ]; then
 	echo "opcache.validate_timestamps=1" >> "$INSTALL_DIR/bin/php.ini"
 	echo "opcache.revalidate_freq=0" >> "$INSTALL_DIR/bin/php.ini"
 	echo "opcache.file_update_protection=0" >> "$INSTALL_DIR/bin/php.ini"
-	echo "opcache.optimization_level=0x7FFEBFFF ;https://github.com/php/php-src/blob/53c1b485741f31a17b24f4db2b39afeb9f4c8aba/ext/opcache/Optimizer/zend_optimizer.h" >> "$INSTALL_DIR/bin/php.ini"
-	if [ "$HAVE_OPCACHE_JIT" == "yes" ]; then
-		echo "" >> "$INSTALL_DIR/bin/php.ini"
-		echo "; ---- ! WARNING ! ----" >> "$INSTALL_DIR/bin/php.ini"
-		echo "; JIT can provide big performance improvements, but it may make your server crash or behave in weird ways. Use it at your own risk." >> "$INSTALL_DIR/bin/php.ini"
-		echo "; See https://www.php.net/manual/en/opcache.configuration.php#ini.opcache.jit for possible options." >> "$INSTALL_DIR/bin/php.ini"
-		echo "opcache.jit=off" >> "$INSTALL_DIR/bin/php.ini"
-		echo "opcache.jit_buffer_size=128M" >> "$INSTALL_DIR/bin/php.ini"
-	fi
+	echo "opcache.jit=disable" >> "$INSTALL_DIR/bin/php.ini"
+	echo "opcache.jit_buffer_size=0" >> "$INSTALL_DIR/bin/php.ini"
 fi
 if [[ "$COMPILE_TARGET" == "mac-"* ]]; then
 	#we don't have permission to allocate executable memory on macOS due to not being codesigned
