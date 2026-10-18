@@ -1,33 +1,45 @@
 ﻿$ErrorActionPreference="Stop"
 $ProgressPreference="SilentlyContinue"
 
-$PHP_VERSIONS=@("8.4.24")
-
-$PHP_SDK_VER="2.4.0"
+$versions = @{}
+Get-Content -LiteralPath (Join-Path $PSScriptRoot 'versions.env') | ForEach-Object {
+    if ($_ -notmatch '^([A-Z0-9_]+)=([A-Za-z0-9_.-]+)$') { throw "Invalid versions.env entry: $_" }
+    $versions[$Matches[1]] = $Matches[2]
+}
+$PHP_SDK_VER=$versions.PHP_SDK_VERSION
 $ARCH="x64"
-
-#### NOTE: Tags with "v" prefixes behave weirdly in the GitHub API. They'll be stripped in some places but not others.
-#### Use commit hashes to avoid this.
-
-$LIBYAML_VER="0.2.5"
-$PTHREAD_W32_VER="3.0.0"
-$LEVELDB_MCPE_VER="1c7564468b41610da4f498430e795ca4de0931ff" #release not tagged
-$LIBDEFLATE_VER="96836d7d9d10e3e0d53e6edb54eb908514e336c4" #1.24 - see above note about "v" prefixes
-
-$PHP_PMMPTHREAD_VER="6.3.0"
-$PHP_YAML_VER="2.3.0"
-$PHP_CHUNKUTILS2_VER="0.3.5"
-$PHP_IGBINARY_VER="3.2.16"
-$PHP_LEVELDB_VER="88071eb1b1eae96af043229104b9d813f7cbe40c" #release not tagged
-$PHP_CRYPTO_VER="999b3c7edbc7f8ca4fdeb0bb4bbae488ad0daf07" #release not tagged
-$PHP_RECURSIONGUARD_VER="0.1.0"
-$PHP_MORTON_VER="0.1.2"
-$PHP_LIBDEFLATE_VER="0.2.1"
-$PHP_XXHASH_VER="0.2.0"
-$PHP_XDEBUG_VER="3.5.0"
-$PHP_ARRAYDEBUG_VER="0.2.1"
-$PHP_ENCODING_VER="1.0.0"
-$PHP_SNAPPY_VER="0.2.3"
+$LIBYAML_VER=$versions.YAML_VERSION
+$PTHREAD_W32_VER=$versions.PTHREADS4W_VERSION
+$LEVELDB_MCPE_VER=$versions.LEVELDB_VERSION
+$LIBDEFLATE_VER=$versions.LIBDEFLATE_VERSION
+$PHP_PMMPTHREAD_VER=$versions.EXT_PMMPTHREAD_VERSION
+$PHP_YAML_VER=$versions.EXT_YAML_VERSION
+$PHP_CHUNKUTILS2_VER=$versions.EXT_CHUNKUTILS2_VERSION
+$PHP_IGBINARY_VER=$versions.EXT_IGBINARY_VERSION
+$PHP_LEVELDB_VER=$versions.EXT_LEVELDB_VERSION
+$PHP_CRYPTO_VER=$versions.EXT_CRYPTO_VERSION
+$PHP_RECURSIONGUARD_VER=$versions.EXT_RECURSIONGUARD_VERSION
+$PHP_MORTON_VER=$versions.EXT_MORTON_VERSION
+$PHP_LIBDEFLATE_VER=$versions.EXT_LIBDEFLATE_VERSION
+$PHP_XXHASH_VER=$versions.EXT_XXHASH_VERSION
+$PHP_XDEBUG_VER=$versions.EXT_XDEBUG_VERSION
+$PHP_ARRAYDEBUG_VER=$versions.EXT_ARRAYDEBUG_VERSION
+$PHP_ENCODING_VER=$versions.EXT_ENCODING_VERSION
+$PHP_SNAPPY_VER=$versions.EXT_SNAPPY_VERSION
+$PHP_SNAPPY_COMMIT=$versions.EXT_SNAPPY_COMMIT
+$checksums = @{}
+Get-Content -LiteralPath (Join-Path $PSScriptRoot 'sources.sha256') | ForEach-Object {
+    if ($_ -notmatch '^([0-9a-f]{64})  (\S+)$') { throw "Invalid sources.sha256 entry: $_" }
+    $checksums[$Matches[2]] = $Matches[1]
+}
+$windowsDeps = @()
+$windowsDepsLock = Join-Path $PSScriptRoot 'windows-deps.sha256'
+Get-Content -LiteralPath $windowsDepsLock | ForEach-Object {
+    if ($_ -notmatch '^([0-9a-f]{64})  ([A-Za-z0-9_.-]+\.zip)$') { throw "Invalid windows-deps.sha256 entry: $_" }
+    $windowsDeps += $Matches[2]
+    $checksums["php-deps-$($Matches[2])"] = $Matches[1]
+}
+$windowsDepsHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $windowsDepsLock).Hash
 
 
 function pm-echo {
@@ -113,7 +125,6 @@ foreach ($dep in $script_dependencies) {
 pm-echo "Checking configuration options"
 
 $PHP_VERSION_BASE="auto"
-$PHP_VER=""
 if ($env:PHP_VERSION_BASE -ne $null) {
     $PHP_VERSION_BASE=$env:PHP_VERSION_BASE
 }
@@ -162,21 +173,10 @@ pm-echo "Compiling with configuration for PocketMine-MP $PM_VERSION_MAJOR"
 if ($PHP_VERSION_BASE -eq "auto") {
     $PHP_VERSION_BASE=$PREFERRED_PHP_VERSION_BASE
 } elseif ($PHP_VERSION_BASE -ne $PREFERRED_PHP_VERSION_BASE) {
-    pm-echo "[WARNING] $PHP_VERSION_BASE is not the default for PocketMine-MP $PM_VERSION_MAJOR"
-    pm-echo "[WARNING] The build may fail, or you may not be able to use the resulting PHP binary"
+    pm-fatal-error "Unsupported PHP base version $PHP_VERSION_BASE"
 }
 
-foreach ($version in $PHP_VERSIONS) {
-    if ($version -like "$PHP_VERSION_BASE.*") {
-        $PHP_VER=$version
-        break
-    }
-}
-if ($PHP_VER -eq "") {
-    pm-echo-error "Unsupported PHP base version $PHP_VERSION_BASE"
-    pm-echo-error "Only supported input: 8.4"
-    exit 1
-}
+$PHP_VER=$versions.PHP_VERSION
 
 #don't really need these except for dev versions
 $PHP_GIT_REV="php-$PHP_VER"
@@ -201,6 +201,14 @@ if ($env:SOURCES_PATH -ne $null) {
 }
 $PHP_SDK_PATH="$BASE_PATH\php-sdk-binary-tools-$PHP_SDK_VER"
 $SOURCES_PATH="$BASE_PATH\php-$PHP_DISPLAY_VER-$($OUT_PATH_REL.ToLower())"
+$LIB_BUILD_DIR="$BASE_PATH\deps-build-php-$PHP_VERSION_BASE-$($OUT_PATH_REL.ToLower())-$($windowsDepsHash.Substring(0,12))"
+$DEPS_DIR="$BASE_PATH\deps-php-$PHP_VERSION_BASE-$($OUT_PATH_REL.ToLower())-$($windowsDepsHash.Substring(0,12))"
+$basePathFull=[IO.Path]::GetFullPath($BASE_PATH).TrimEnd('\') + '\'
+foreach ($path in @($SOURCES_PATH, $LIB_BUILD_DIR, $DEPS_DIR)) {
+    if (![IO.Path]::GetFullPath($path).StartsWith($basePathFull, [StringComparison]::OrdinalIgnoreCase)) {
+        pm-fatal-error "Build path is outside $BASE_PATH"
+    }
+}
 
 pm-echo "Using path $SOURCES_PATH for PHP build sources"
 if (-not (Test-Path "$BASE_PATH")) {
@@ -215,34 +223,39 @@ if (Test-Path $SOURCES_PATH) {
     pm-echo "Deleting old PHP build workspace $SOURCES_PATH..."
     Remove-Item -Recurse -Force $SOURCES_PATH 2>&1
 }
-$LIB_BUILD_DIR="$BASE_PATH\deps-build-php-$PHP_VERSION_BASE-$($OUT_PATH_REL.ToLower())"
-
-if (Test-Path "$LIB_BUILD_DIR") {
-    pm-echo "Deleting old deps build workspace $LIB_BUILD_DIR..."
-    Remove-Item -Recurse -Force "$LIB_BUILD_DIR" >> $log_file 2>&1
-}
-
 $download_cache="$pwd\download_cache"
 function download-file {
     param ([string] $url, [string] $prefix)
 
     $cached_filename="$prefix-$($url.Substring($url.LastIndexOf("/") + 1))"
     $cached_path="$download_cache\$cached_filename"
+    $expected_hash=$checksums[$cached_filename]
+    if (!$expected_hash) { pm-fatal-error "No SHA-256 pin for $cached_filename" }
 
     if (!(Test-Path $download_cache)) {
         mkdir $download_cache >> $log_file 2>&1
     }
 
     if (Test-Path $cached_path) {
-        echo "Cache hit for URL: $url" >> $log_file
-    } else {
-        echo "Downloading file from $url to $cached_path" >> $log_file
-        #download to a tmpfile first, so that we don't leave borked cache entries for later runs
-        Invoke-WebRequest -Uri $url -OutFile "$download_cache/.temp" >> $log_file 2>&1
-        Move-Item "$download_cache/.temp" $cached_path >> $log_file 2>&1
+        if ((Get-FileHash -Algorithm SHA256 -LiteralPath $cached_path).Hash -ne $expected_hash) {
+            pm-echo-error "Discarding corrupt cached file $cached_filename"
+            Remove-Item -LiteralPath $cached_path
+        } else {
+            echo "Cache hit for URL: $url" >> $log_file
+        }
     }
     if (!(Test-Path $cached_path)) {
-        pm-fatal-error "Failed to download file from $url"
+        echo "Downloading file from $url to $cached_path" >> $log_file
+        $temp_path="$cached_path.$PID.tmp"
+        try {
+            Invoke-WebRequest -Uri $url -OutFile $temp_path >> $log_file 2>&1
+            if ((Get-FileHash -Algorithm SHA256 -LiteralPath $temp_path).Hash -ne $expected_hash) {
+                pm-fatal-error "SHA-256 mismatch for $cached_filename"
+            }
+            Move-Item -LiteralPath $temp_path -Destination $cached_path
+        } finally {
+            Remove-Item -LiteralPath $temp_path -ErrorAction SilentlyContinue
+        }
     }
 
     return $cached_path
@@ -301,9 +314,26 @@ function sdk-command {
 }
 
 function download-php-deps {
-    write-library "PHP prebuilt deps" "$PHP_VERSION_BASE/$VC_VER"
-    write-download
-    sdk-command "phpsdk_deps -u -t $VC_VER -b $PHP_VERSION_BASE -a $ARCH -d $DEPS_DIR || exit 1"
+    write-library "PHP prebuilt deps" "$PHP_VERSION_BASE/$VC_VER/$ARCH"
+    $stamp="$DEPS_DIR\.quark-deps.sha256"
+    if ((Test-Path $stamp) -and ((Get-Content -LiteralPath $stamp -Raw).Trim() -eq $windowsDepsHash)) {
+        write-cached
+        write-done
+        return
+    }
+    if (Test-Path $DEPS_DIR) {
+        Remove-Item -LiteralPath $DEPS_DIR -Recurse -Force
+    }
+    New-Item -ItemType Directory -Path $DEPS_DIR | Out-Null
+    foreach ($name in $windowsDeps) {
+        $file = download-file "https://downloads.php.net/~windows/php-sdk/deps/$VC_VER/$ARCH/$name" "php-deps"
+        Expand-Archive -LiteralPath $file -DestinationPath $DEPS_DIR -Force >> $log_file 2>&1
+    }
+    if (Test-Path "$DEPS_DIR\openssl.cnf") {
+        New-Item -ItemType Directory -Force -Path "$DEPS_DIR\template\ssl" | Out-Null
+        Move-Item -LiteralPath "$DEPS_DIR\openssl.cnf" -Destination "$DEPS_DIR\template\ssl\openssl.cnf" -Force
+    }
+    Set-Content -LiteralPath $stamp -Value $windowsDepsHash -NoNewline
     write-done
 }
 
@@ -455,7 +485,9 @@ function download-php-extensions {
     write-library "php-ext snappy" $PHP_SNAPPY_VER
     write-download
     (& cmd.exe /c "git clone --branch $PHP_SNAPPY_VER --depth 1 https://github.com/kjdev/php-ext-snappy.git snappy 2>&1") >> $log_file
+    if ($LASTEXITCODE -ne 0 -or (& git -C snappy rev-parse HEAD) -ne $PHP_SNAPPY_COMMIT) { pm-fatal-error "Failed to verify ext-snappy source" }
     (& cmd.exe /c "git -C snappy submodule update --init --depth 1 snappy 2>&1") >> $log_file
+    if ($LASTEXITCODE -ne 0) { pm-fatal-error "Failed to initialize ext-snappy submodule" }
     $snappy_config_path = "snappy\config.w32"
     $snappy_config = Get-Content $snappy_config_path -Raw
     $snappy_sources_directive = 'ADD_SOURCES("snappy",'
@@ -471,10 +503,13 @@ function download-php-extensions {
     write-library "php-ext crypto" $PHP_CRYPTO_VER
     write-download
     (& cmd.exe /c "git clone https://github.com/bukka/php-crypto.git crypto 2>&1") >> $log_file
+    if ($LASTEXITCODE -ne 0) { pm-fatal-error "Failed to clone ext-crypto" }
     Push-Location crypto
     write-status "preparing"
     (& cmd.exe /c "git checkout $PHP_CRYPTO_VER 2>&1") >> $log_file
+    if ($LASTEXITCODE -ne 0 -or (& git rev-parse HEAD) -ne $PHP_CRYPTO_VER) { pm-fatal-error "Failed to verify ext-crypto source" }
     (& cmd.exe /c "git submodule update --init --recursive 2>&1") >> $log_file
+    if ($LASTEXITCODE -ne 0) { pm-fatal-error "Failed to initialize ext-crypto submodules" }
     write-done
     Pop-Location
 
@@ -487,19 +522,25 @@ pm-echo "Checking that SDK can find Visual Studio"
 #using CMAKE_TARGET for this is a bit meh but it's human readable at least
 sdk-command "exit /b 0" "Please install $CMAKE_TARGET"
 
-$DEPS_DIR="$BASE_PATH\deps-php-$PHP_VERSION_BASE-$($OUT_PATH_REL.ToLower())"
-#custom libs depend on some standard libs, so prepare these first
-#a bit annoying because this part of the build is slow and makes it take longer to find problems
 download-php-deps
 
-mkdir $LIB_BUILD_DIR >> $log_file 2>&1
-cd $LIB_BUILD_DIR >> $log_file 2>&1
+$customStamp="$DEPS_DIR\.quark-custom-libs.stamp"
+$customKey="{0}:{1}:{2}" -f (Get-FileHash -Algorithm SHA256 -LiteralPath $PSCommandPath).Hash, (Get-FileHash -Algorithm SHA256 -LiteralPath (Join-Path $PSScriptRoot 'versions.env')).Hash, $windowsDepsHash
+if ((Test-Path $customStamp) -and ((Get-Content -LiteralPath $customStamp -Raw).Trim() -eq $customKey)) {
+    pm-echo "Using cached custom dependencies"
+} else {
+    if (Test-Path $LIB_BUILD_DIR) {
+        Remove-Item -LiteralPath $LIB_BUILD_DIR -Recurse -Force
+    }
+    New-Item -ItemType Directory -Path $LIB_BUILD_DIR | Out-Null
+    cd $LIB_BUILD_DIR >> $log_file 2>&1
 
-build-pthreads4w
-build-yaml
-#these two both need zlib from the standard deps
-build-leveldb
-build-libdeflate
+    build-pthreads4w
+    build-yaml
+    build-leveldb
+    build-libdeflate
+    Set-Content -LiteralPath $customStamp -Value $customKey -NoNewline
+}
 
 cd $BASE_PATH >> $log_file 2>&1
 
@@ -647,7 +688,6 @@ if ($PHP_JIT_ENABLE_ARG -eq "yes") {
     append-file-utf8 "opcache.jit_buffer_size=128M" $php_ini
     append-file-utf8 "" $php_ini
 }
-append-file-utf8 ";WARNING: When loaded, xdebug 3.2.0 will cause segfaults whenever an uncaught error is thrown, even if xdebug.mode=off. Load it at your own risk." $php_ini
 append-file-utf8 ";zend_extension=php_xdebug.dll" $php_ini
 append-file-utf8 ";https://xdebug.org/docs/all_settings#mode" $php_ini
 append-file-utf8 "xdebug.mode=off" $php_ini
@@ -659,6 +699,6 @@ append-file-utf8 "xdebug.trace_output_name=trace.%s.%p.%r" $php_ini
 write-done
 pm-echo "Xdebug is included, but disabled by default. To enable it, change 'xdebug.mode' in your php.ini file."
 
-pm-echo "NOTE: You may need to install VC++ Redistributable for the binaries to work. Download it here: https://aka.ms/vs/16/release/vc_redist.x64.exe"
+pm-echo "NOTE: You may need to install VC++ Redistributable for the binaries to work. Download it here: https://aka.ms/vs/17/release/vc_redist.x64.exe"
 pm-echo "PHP binary files installed in $outpath\bin"
-pm-echo "If the binary doesn't work, please report an issue at https://github.com/pmmp/PHP-Binaries and attach the `"compile.log`" file"
+pm-echo "If the binary doesn't work, please report an issue at https://github.com/Bedrock-Phanatics/PHP-Binaries and attach the `"compile.log`" file"

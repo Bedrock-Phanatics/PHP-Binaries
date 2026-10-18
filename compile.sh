@@ -1,42 +1,6 @@
 #!/usr/bin/env bash
-PHP_VERSIONS=("8.4.24")
-
-#### NOTE: Tags with "v" prefixes behave weirdly in the GitHub API. They'll be stripped in some places but not others.
-#### Use commit hashes to avoid this.
-
-
-ZLIB_VERSION="1.3.1"
-GMP_VERSION="6.3.0"
-
-### Think twice before updating the minor/major versions of curl.
-### curl is by far the worst offender when it comes to random
-### build breakages on updates.
-CURL_VERSION="curl-8_13_0"
-
-YAML_VERSION="0.2.5"
-LEVELDB_VERSION="1c7564468b41610da4f498430e795ca4de0931ff" #release not tagged
-LIBXML_VERSION="2.15.1"
-LIBPNG_VERSION="1.6.53"
-LIBJPEG_VERSION="9f"
-OPENSSL_VERSION="3.6.0"
-LIBZIP_VERSION="1.11.4"
-SQLITE3_VERSION="3510100" #3.51.1
-LIBDEFLATE_VERSION="c8c56a20f8f621e6a966b716b31f1dedab6a41e3" #1.25 - see above note about "v" prefixes
-
-EXT_PMMPTHREAD_VERSION="6.3.0"
-EXT_YAML_VERSION="2.3.0"
-EXT_LEVELDB_VERSION="88071eb1b1eae96af043229104b9d813f7cbe40c" #release not tagged
-EXT_CHUNKUTILS2_VERSION="0.3.5"
-EXT_XDEBUG_VERSION="3.5.0"
-EXT_IGBINARY_VERSION="3.2.16"
-EXT_CRYPTO_VERSION="999b3c7edbc7f8ca4fdeb0bb4bbae488ad0daf07" #release not tagged
-EXT_RECURSIONGUARD_VERSION="0.1.0"
-EXT_LIBDEFLATE_VERSION="0.2.1"
-EXT_MORTON_VERSION="0.1.2"
-EXT_XXHASH_VERSION="0.2.0"
-EXT_ARRAYDEBUG_VERSION="0.2.1"
-EXT_ENCODING_VERSION="1.0.0"
-EXT_SNAPPY_VERSION="0.2.3"
+source "$(dirname "${BASH_SOURCE[0]}")/versions.env"
+set -o pipefail
 
 function write_out {
 	echo "[$1] $2"
@@ -174,8 +138,8 @@ while getopts "::t:j:sdDxfgnva:P:c:l:Jiz:" OPTION; do
 			write_out WARNING "Reusing previously built libraries may break if different args were used!"
 			;;
 		c)
-			mkdir "$OPTARG" 2> /dev/null
-			DOWNLOAD_CACHE="$(cd $OPTARG; pwd)"
+			mkdir -p "$OPTARG"
+			DOWNLOAD_CACHE="$(cd "$OPTARG" && pwd)"
 			write_out opt "Caching downloaded files in $DOWNLOAD_CACHE and reusing if available"
 			;;
 		t)
@@ -270,7 +234,7 @@ case $PM_VERSION_MAJOR in
 		write_error "Please specify PocketMine-MP major version target with -P (e.g. -P5)"
 		exit 1
 		;;
-	\?)
+	*)
 		write_error "PocketMine-MP $PM_VERSION_MAJOR is not supported by this version of the build script"
 		exit 1
 		;;
@@ -281,21 +245,7 @@ write_out "opt" "Compiling with configuration for PocketMine-MP $PM_VERSION_MAJO
 if [ "$PHP_VERSION_BASE" == "auto" ]; then
 	PHP_VERSION_BASE="$PREFERRED_PHP_VERSION_BASE"
 elif [ "$PHP_VERSION_BASE" != "$PREFERRED_PHP_VERSION_BASE" ]; then
-	#TODO: validate that this PHP version is able to be used
-	write_out "WARNING" "$PHP_VERSION_BASE is not the default for PocketMine-MP $PM_VERSION_MAJOR"
-	write_out "WARNING" "The build may fail, or you may not be able to use the resulting PHP binary"
-fi
-
-for version in "${PHP_VERSIONS[@]}"; do
-	if [[ "$version" == "$PHP_VERSION_BASE."* ]]; then
-		PHP_VERSION="$version"
-		break
-	fi
-done
-
-if [ "$PHP_VERSION" == "" ]; then
 	write_error "Unsupported PHP base version $PHP_VERSION_BASE"
-	write_error "Only supported input: 8.4"
 	exit 1
 fi
 
@@ -321,7 +271,7 @@ else
 		if [ "$DOWNLOAD_INSECURE" == "yes" ]; then
 			curl_flags="--insecure"
 		fi
-		alias _download_file="curl $curl_flags --silent --show-error --location --globoff"
+		alias _download_file="curl $curl_flags --fail --silent --show-error --location --globoff"
 	else
 		write_error "Neither curl nor wget found. Please install one and try again."
 		exit 1
@@ -332,23 +282,45 @@ function download_file {
 	local url="$1"
 	local prefix="$2"
 	local cached_filename="$prefix-${url##*/}"
+	local cached_path="$DOWNLOAD_CACHE/$cached_filename"
+	local expected_hash
+	local actual_hash
+	local temp_path="$cached_path.tmp.$$"
+	expected_hash=$(awk -v name="$cached_filename" '$2 == name { print $1 }' "$DIR/sources.sha256")
+	if [[ ! "$expected_hash" =~ ^[0-9a-f]{64}$ ]]; then
+		write_error "No SHA-256 pin for $cached_filename"
+		return 1
+	fi
 
-	if [[ "$DOWNLOAD_CACHE" != "" ]]; then
-		if [[ ! -d "$DOWNLOAD_CACHE" ]]; then
-			mkdir "$DOWNLOAD_CACHE" >> "$DIR/install.log" 2>&1
-		fi
-		if [[ -f "$DOWNLOAD_CACHE/$cached_filename" ]]; then
-			echo "Cache hit for URL: $url" >> "$DIR/install.log"
+	mkdir -p "$DOWNLOAD_CACHE" >> "$DIR/install.log" 2>&1
+	if [[ -f "$cached_path" ]]; then
+		actual_hash=$(hash_file "$cached_path")
+		if [[ "$actual_hash" != "$expected_hash" ]]; then
+			write_error "Discarding corrupt cached file $cached_filename"
+			rm -f "$cached_path"
 		else
-			echo "Downloading file to cache: $url" >> "$DIR/install.log"
-			#download to a tmpfile first, so that we don't leave borked cache entries for later runs
-			_download_file "$1" > "$DOWNLOAD_CACHE/.temp" 2>> "$DIR/install.log"
-			mv "$DOWNLOAD_CACHE/.temp" "$DOWNLOAD_CACHE/$cached_filename" >> "$DIR/install.log" 2>&1
+			echo "Cache hit for URL: $url" >> "$DIR/install.log"
 		fi
-		cat "$DOWNLOAD_CACHE/$cached_filename" 2>> "$DIR/install.log"
+	fi
+	if [[ ! -f "$cached_path" ]]; then
+		echo "Downloading file to cache: $url" >> "$DIR/install.log"
+		_download_file "$url" > "$temp_path" 2>> "$DIR/install.log" || { rm -f "$temp_path"; return 1; }
+		actual_hash=$(hash_file "$temp_path")
+		if [[ "$actual_hash" != "$expected_hash" ]]; then
+			write_error "SHA-256 mismatch for $cached_filename"
+			rm -f "$temp_path"
+			return 1
+		fi
+		mv "$temp_path" "$cached_path" >> "$DIR/install.log" 2>&1
+	fi
+	cat "$cached_path" 2>> "$DIR/install.log"
+}
+
+function hash_file {
+	if command -v sha256sum >/dev/null 2>&1; then
+		sha256sum "$1" | cut -d ' ' -f1
 	else
-		echo "Downloading non-cached file: $url" >> "$DIR/install.log"
-		_download_file "$1" 2>> "$DIR/install.log"
+		shasum -a 256 "$1" | cut -d ' ' -f1
 	fi
 }
 
@@ -522,13 +494,13 @@ fi
 if [ "$DO_OPTIMIZE" != "no" ]; then
 	#FLAGS_LTO="-fvisibility=hidden -flto"
 	CFLAGS="$CFLAGS -O2"
-	GENERIC_CFLAGS="$CFLAGS -ftree-vectorize -fomit-frame-pointer"
+	GENERIC_CFLAGS="-ftree-vectorize -fomit-frame-pointer"
 	$CC $CFLAGS $GENERIC_CFLAGS -o test test.c >> "$DIR/install.log" 2>&1
 	if [ $? -eq 0 ]; then
 		CFLAGS="$CFLAGS $GENERIC_CFLAGS"
 	fi
 	#clang does not understand the following and will fail
-	GCC_CFLAGS="$CFLAGS -funsafe-loop-optimizations -fpredictive-commoning -ftracer -ftree-loop-im -frename-registers -fcx-limited-range -funswitch-loops -fivopts -fno-gcse"
+	GCC_CFLAGS="-funsafe-loop-optimizations -fpredictive-commoning -ftracer -ftree-loop-im -frename-registers -fcx-limited-range -funswitch-loops -fivopts -fno-gcse"
 	$CC $CFLAGS $GCC_CFLAGS -o test test.c >> "$DIR/install.log" 2>&1
 	if [ $? -eq 0 ]; then
 		CFLAGS="$CFLAGS $GCC_CFLAGS"
@@ -554,7 +526,7 @@ rm test >> "$DIR/install.log" 2>&1
 
 export CC="$CC"
 export CXX="$CXX"
-export CFLAGS="-O2 -fPIC $CFLAGS"
+export CFLAGS="-fPIC $CFLAGS"
 export CXXFLAGS="$CFLAGS $CXXFLAGS"
 export LDFLAGS="$LDFLAGS"
 export CPPFLAGS="$CPPFLAGS"
@@ -578,8 +550,8 @@ set -e
 write_library "PHP" "$PHP_VERSION"
 write_download
 
-download_github_src "php/php-src" "php-$PHP_VERSION" "php" | tar -zx >> "$DIR/install.log" 2>&1
-mv php-src-php-$PHP_VERSION php
+download_file "https://www.php.net/distributions/php-$PHP_VERSION.tar.gz" "php" | tar -zx >> "$DIR/install.log" 2>&1
+mv "php-$PHP_VERSION" php
 write_done
 
 function build_zlib {
@@ -849,7 +821,7 @@ function build_libpng {
 	if cant_use_cache "$libpng_dir"; then
 		rm -rf "$libpng_dir"
 		write_download
-		download_from_mirror "libpng-$LIBPNG_VERSION.tar.gz" "libpng" | tar -zx >> "$DIR/install.log" 2>&1
+		download_file "https://downloads.sourceforge.net/project/libpng/libpng16/$LIBPNG_VERSION/libpng-$LIBPNG_VERSION.tar.gz" "libpng" | tar -zx >> "$DIR/install.log" 2>&1
 
 		write_configure
 		cd "$libpng_dir"
@@ -913,8 +885,7 @@ function build_libxml2 {
 	if cant_use_cache "$libxml2_dir"; then
 		rm -rf "$libxml2_dir"
 		write_download
-		download_from_mirror "libxml2-v$LIBXML_VERSION.tar.gz" "libxml2" | tar -xz >> "$DIR/install.log" 2>&1
-		mv libxml2-v$LIBXML_VERSION "$libxml2_dir"
+		download_file "https://download.gnome.org/sources/libxml2/2.15/libxml2-$LIBXML_VERSION.tar.xz" "libxml2" | tar -xJ >> "$DIR/install.log" 2>&1
 
 		write_configure
 		cd "$libxml2_dir"
@@ -923,8 +894,7 @@ function build_libxml2 {
 		else
 			local EXTRA_FLAGS="--enable-shared=yes --enable-static=no"
 		fi
-		sed -i.bak 's{libtoolize --version{"$LIBTOOLIZE" --version{' autogen.sh #needed for glibtool on macos
-		./autogen.sh --prefix="$INSTALL_DIR" \
+		./configure --prefix="$INSTALL_DIR" \
 			--without-iconv \
 			--without-python \
 			--without-lzma \
@@ -1003,7 +973,7 @@ function build_sqlite3 {
 	if cant_use_cache "$sqlite3_dir"; then
 		rm -rf "$sqlite3_dir"
 		write_download
-		download_from_mirror "sqlite-autoconf-$SQLITE3_VERSION.tar.gz" "sqlite3" | tar -zx >> "$DIR/install.log" 2>&1
+		download_file "https://www.sqlite.org/2026/sqlite-autoconf-$SQLITE3_VERSION.tar.gz" "sqlite3" | tar -zx >> "$DIR/install.log" 2>&1
 		mv sqlite-autoconf-$SQLITE3_VERSION "$sqlite3_dir" >> "$DIR/install.log" 2>&1
 		write_configure
 		cd "$sqlite3_dir"
@@ -1147,6 +1117,7 @@ get_github_extension "encoding" "$EXT_ENCODING_VERSION" "pmmp" "ext-encoding"
 
 echo -n "  snappy: downloading $EXT_SNAPPY_VERSION..."
 git clone --branch "$EXT_SNAPPY_VERSION" --depth 1 https://github.com/kjdev/php-ext-snappy.git "$BUILD_DIR/php/ext/snappy" >> "$DIR/install.log" 2>&1
+test "$(git -C "$BUILD_DIR/php/ext/snappy" rev-parse HEAD)" = "$EXT_SNAPPY_COMMIT"
 git -C "$BUILD_DIR/php/ext/snappy" submodule update --init --depth 1 snappy >> "$DIR/install.log" 2>&1
 write_done
 
@@ -1166,8 +1137,6 @@ elif [[ "$COMPILE_TARGET" == "linux"* ]] && [[ "$IS_CROSSCOMPILE" != "yes" ]]; t
 			break
 		fi
 	done
-else
-	echo "wtf $COMPILE_TARGET"
 fi
 if [ -z "$cafile" ]; then
 	write_out "WARNING" "Don't know where to find SSL CA bundle for this target; PHP code won't be able to safely access https:// links unless openssl.cafile is configured to the correct path in php.ini"
@@ -1252,7 +1221,6 @@ fi
 RANLIB=$RANLIB CFLAGS="$CFLAGS $FLAGS_LTO" CXXFLAGS="$CXXFLAGS $FLAGS_LTO" LDFLAGS="$LDFLAGS $FLAGS_LTO" ./configure $PHP_OPTIMIZATION --prefix="$INSTALL_DIR" \
 --exec-prefix="$INSTALL_DIR" \
 --with-curl \
---with-zlib \
 --with-zlib \
 --with-gmp \
 --with-yaml \
@@ -1419,7 +1387,6 @@ if [[ "$HAVE_XDEBUG" == "yes" ]]; then
 	write_install
 	make install >> "$DIR/install.log" 2>&1
 	echo "" >> "$INSTALL_DIR/bin/php.ini" 2>&1
-	echo ";WARNING: When loaded, xdebug 3.2.0 will cause segfaults whenever an uncaught error is thrown, even if xdebug.mode=off. Load it at your own risk." >> "$INSTALL_DIR/bin/php.ini" 2>&1
 	echo ";zend_extension=xdebug.so" >> "$INSTALL_DIR/bin/php.ini" 2>&1
 	echo ";https://xdebug.org/docs/all_settings#mode" >> "$INSTALL_DIR/bin/php.ini" 2>&1
 	echo "xdebug.mode=off" >> "$INSTALL_DIR/bin/php.ini" 2>&1
