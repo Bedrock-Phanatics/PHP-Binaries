@@ -95,6 +95,9 @@ for($sample = 0; $sample < 7; ++$sample){
 			if(!$worker->shutdown()){
 				throw new RuntimeException('Worker failed to shut down');
 			}
+			if($worker->collect() !== 0){
+				throw new RuntimeException('Worker tasks were not collected');
+			}
 		}
 		if($counter->value !== 256){
 			throw new RuntimeException('Worker tasks were lost');
