@@ -2,8 +2,6 @@ name: Compare PHP compiler options
 
 on:
   workflow_dispatch:
-  push:
-    branches: [codex/quark-runtime-performance]
 
 permissions:
   contents: read
