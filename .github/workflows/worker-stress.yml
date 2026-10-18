@@ -1,0 +1,52 @@
+name: Stress packaged worker runtime
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: Build run containing a Linux x86_64 package
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  workers:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Download package
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BUILD_RUN_ID: ${{ inputs.run_id }}
+        run: |
+          gh run download "$BUILD_RUN_ID" -R "$GITHUB_REPOSITORY" -n PHP-8.4-Linux-x86_64-PM5 -D runtime
+          tar -xzf runtime/PHP-8.4-Linux-x86_64-PM5.tar.gz -C runtime
+
+      - name: Repeat benchmark and capture stalled stacks
+        run: |
+          set -euo pipefail
+          command -v gdb >/dev/null || { sudo apt-get update; sudo apt-get install -y gdb; }
+          php=runtime/bin/php7/bin/php
+          opcache="$(find runtime/bin/php7/lib/php/extensions -name opcache.so -print -quit)"
+          test -n "$opcache"
+          for sample in {1..20}; do
+            echo "Benchmark process $sample"
+            "$php" -c runtime/bin/php7/bin/php.ini -d "extension_dir=$(dirname "$opcache")" benchmarks/baseline.php > /dev/null &
+            pid=$!
+            for tick in {1..100}; do
+              if ! kill -0 "$pid" 2>/dev/null; then
+                wait "$pid"
+                continue 2
+              fi
+              sleep 0.2
+            done
+            sudo gdb -q -batch -p "$pid" -ex 'thread apply all bt' || true
+            kill "$pid"
+            wait "$pid" || true
+            exit 1
+          done
