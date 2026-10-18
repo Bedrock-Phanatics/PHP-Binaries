@@ -18,7 +18,9 @@ CI checks the Quark v6 PHP runtime requirements: PHP 8.4+, ZTS, required extensi
 
 On Linux or macOS, run `bash tests/test.sh generic bin/php7/bin/php`. On Windows, run `bin\php\php.exe -c bin\php\php.ini tests\generic\smoke.php`.
 
-`benchmarks/baseline.php` records seven samples each for PHP process startup, a fixed one-million-iteration CPU loop, and eight worker start/shutdown cycles. It also reports PHP allocated memory at startup and peak use. CI saves each build's `benchmark.json` with its archive. These measurements are baselines, not release thresholds.
+`benchmarks/baseline.php` records startup, CPU throughput, worker startup and task throughput, allocation churn, PHP heap use, and peak RSS. CI saves each build's `benchmark.json` with its archive. Run the `Compare PHP compiler options` workflow to build and test O2, O3, and O2 with LTO on the same Linux runner; it saves three benchmark samples per build. These measurements are baselines, not release thresholds.
+
+O2 remains the release setting until a compiler variant improves the Quark workload without failing smoke and allocator checks. PGO needs representative server training traffic, so the current synthetic benchmark is not used as a PGO profile. No alternate allocator is bundled without a measured gain in sustained memory use and worker throughput.
 
 Build versions are pinned in `versions.env`. `sources.sha256` verifies source archives, and `windows-deps.sha256` locks the official PHP 8.4 Windows dependency packages. Update the version and checksum together when changing a dependency. Download caches are checked before use, and Windows reuses installed dependencies when the lockfiles and build script have not changed.
 

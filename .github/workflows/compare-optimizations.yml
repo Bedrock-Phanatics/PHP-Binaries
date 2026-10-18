@@ -1,0 +1,57 @@
+name: Compare PHP compiler options
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [codex/quark-runtime-performance]
+
+permissions:
+  contents: read
+
+jobs:
+  compare:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 360
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            make autoconf automake libtool libtool-bin m4 wget \
+            libc-bin gzip bzip2 xz-utils bison g++ git cmake \
+            pkg-config re2c ca-certificates file
+
+      - name: Cache source downloads
+        uses: actions/cache@v6
+        with:
+          path: ./download_cache
+          key: ${{ runner.os }}-sources-${{ hashFiles('versions.env', 'sources.sha256') }}
+          restore-keys: ${{ runner.os }}-sources-
+
+      - name: Build and measure on one runner
+        run: |
+          set -euo pipefail
+          source versions.env
+          mkdir -p optimization-results
+          for variant in O2 O3 O2-lto; do
+            PHP_BUILD_OPTIMIZATION="$variant" ./compile.sh \
+              -t linux64 -j "$(nproc)" -g -P 5 -c ./download_cache -z 8.4
+            php=bin/php7/bin/php
+            test "$("$php" -r 'echo PHP_VERSION;')" = "$PHP_VERSION"
+            bash tests/test.sh generic "$php"
+            USE_ZEND_ALLOC=0 MALLOC_CHECK_=3 MALLOC_PERTURB_=165 bash tests/test.sh generic "$php"
+            opcache="$(find bin/php7/lib/php/extensions -name opcache.so -print -quit)"
+            for sample in 1 2 3; do
+              "$php" -c bin/php7/bin/php.ini -d "extension_dir=$(dirname "$opcache")" benchmarks/baseline.php \
+                > "optimization-results/$variant-$sample.json"
+            done
+          done
+
+      - name: Save measurements
+        uses: actions/upload-artifact@v7
+        with:
+          name: php-optimization-comparison
+          path: optimization-results/*.json
+          if-no-files-found: error
