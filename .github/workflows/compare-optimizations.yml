@@ -42,7 +42,7 @@ jobs:
             USE_ZEND_ALLOC=0 MALLOC_CHECK_=3 MALLOC_PERTURB_=165 bash tests/test.sh generic "$php"
             opcache="$(find bin/php7/lib/php/extensions -name opcache.so -print -quit)"
             for sample in 1 2 3; do
-              "$php" -c bin/php7/bin/php.ini -d "extension_dir=$(dirname "$opcache")" benchmarks/baseline.php \
+              timeout 30s "$php" -c bin/php7/bin/php.ini -d "extension_dir=$(dirname "$opcache")" benchmarks/baseline.php \
                 > "optimization-results/$variant-$sample.json"
             done
           done

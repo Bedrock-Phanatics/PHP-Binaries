@@ -150,7 +150,7 @@ jobs:
           bash tests/test.sh generic package-check/hosting/bin/php7/bin/php
 
           OPCACHE="$(find bin/php7/lib/php/extensions -name opcache.so -print -quit)"
-          "$PHP_BINARY" -c bin/php7/bin/php.ini -d "extension_dir=$(dirname "$OPCACHE")" benchmarks/baseline.php > benchmark.json
+          timeout 30s "$PHP_BINARY" -c bin/php7/bin/php.ini -d "extension_dir=$(dirname "$OPCACHE")" benchmarks/baseline.php > benchmark.json
 
           echo "Created:"
           ls -lh "$NORMAL_ARCHIVE" "$HOSTING_ARCHIVE"

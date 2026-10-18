@@ -42,6 +42,7 @@ $workerTasks = [];
 $allocations = [];
 $memory = memory_get_usage(true);
 
+fwrite(STDERR, "startup\n");
 for($sample = 0; $sample < 7; ++$sample){
 	$startup[] = elapsed(static function(): void{
 		$process = proc_open([PHP_BINARY, '-c', dirname(PHP_BINARY) . '/php.ini', '-d', 'extension_dir=' . ini_get('extension_dir'), '-r', 'exit(0);'], [0 => ['pipe', 'r'], 1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes);
@@ -57,6 +58,7 @@ for($sample = 0; $sample < 7; ++$sample){
 	});
 }
 
+fwrite(STDERR, "runtime samples\n");
 for($sample = 0; $sample < 7; ++$sample){
 	$cpu[] = elapsed(static function(): void{
 		$sum = 0;
@@ -75,6 +77,7 @@ for($sample = 0; $sample < 7; ++$sample){
 			}
 		}
 	});
+	fwrite(STDERR, "worker tasks $sample\n");
 	$workerTasks[] = elapsed(static function(): void{
 		$counter = new Counter();
 		$workers = [];
@@ -97,6 +100,7 @@ for($sample = 0; $sample < 7; ++$sample){
 			throw new RuntimeException('Worker tasks were lost');
 		}
 	});
+	fwrite(STDERR, "allocations $sample\n");
 	$allocations[] = elapsed(static function(): void{
 		for($round = 0; $round < 512; ++$round){
 			$blocks = [];
