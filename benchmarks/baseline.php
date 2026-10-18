@@ -92,11 +92,13 @@ for($sample = 0; $sample < 7; ++$sample){
 			$workers[] = $worker;
 		}
 		foreach($workers as $worker){
+			$worker->synchronized(static function() use ($worker): void{
+				while($worker->collect() > 0){
+					$worker->wait();
+				}
+			});
 			if(!$worker->shutdown()){
 				throw new RuntimeException('Worker failed to shut down');
-			}
-			if($worker->collect() !== 0){
-				throw new RuntimeException('Worker tasks were not collected');
 			}
 		}
 		if($counter->value !== 256){
