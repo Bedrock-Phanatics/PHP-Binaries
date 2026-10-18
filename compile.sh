@@ -1123,7 +1123,7 @@ git -C "$BUILD_DIR/php/ext/snappy" submodule update --init --depth 1 snappy >> "
 write_done
 
 echo -n "  toml: downloading $EXT_TOML_VERSION..."
-git clone https://github.com/Bedrock-Phanatics/ext-toml.git "$BUILD_DIR/php/ext/toml" >> "$DIR/install.log" 2>&1 &&
+git clone https://github.com/TrixNEW/ext-toml.git "$BUILD_DIR/php/ext/toml" >> "$DIR/install.log" 2>&1 &&
 	git -C "$BUILD_DIR/php/ext/toml" checkout "$EXT_TOML_COMMIT" >> "$DIR/install.log" 2>&1 &&
 	test "$(git -C "$BUILD_DIR/php/ext/toml" rev-parse HEAD)" = "$EXT_TOML_COMMIT" ||
 	{ write_error "Failed to verify ext-toml source"; exit 1; }

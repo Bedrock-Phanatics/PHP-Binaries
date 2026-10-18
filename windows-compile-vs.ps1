@@ -516,7 +516,7 @@ function download-php-extensions {
 
     write-library "php-ext toml" $PHP_TOML_VER
     write-download
-    (& cmd.exe /c "git clone https://github.com/Bedrock-Phanatics/ext-toml.git toml 2>&1") >> $log_file
+    (& cmd.exe /c "git clone https://github.com/TrixNEW/ext-toml.git toml 2>&1") >> $log_file
     if ($LASTEXITCODE -ne 0) { pm-fatal-error "Failed to clone ext-toml" }
     (& cmd.exe /c "git -C toml checkout $PHP_TOML_COMMIT 2>&1") >> $log_file
     if ($LASTEXITCODE -ne 0 -or (& git -C toml rev-parse HEAD) -ne $PHP_TOML_COMMIT) { pm-fatal-error "Failed to verify ext-toml source" }
