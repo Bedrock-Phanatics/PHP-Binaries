@@ -27,6 +27,8 @@ $PHP_ARRAYDEBUG_VER=$versions.EXT_ARRAYDEBUG_VERSION
 $PHP_ENCODING_VER=$versions.EXT_ENCODING_VERSION
 $PHP_SNAPPY_VER=$versions.EXT_SNAPPY_VERSION
 $PHP_SNAPPY_COMMIT=$versions.EXT_SNAPPY_COMMIT
+$PHP_TOML_VER=$versions.EXT_TOML_VERSION
+$PHP_TOML_COMMIT=$versions.EXT_TOML_COMMIT
 $checksums = @{}
 Get-Content -LiteralPath (Join-Path $PSScriptRoot 'sources.sha256') | ForEach-Object {
     if ($_ -notmatch '^([0-9a-f]{64})  (\S+)$') { throw "Invalid sources.sha256 entry: $_" }
@@ -512,6 +514,14 @@ function download-php-extensions {
     write-done
     Pop-Location
 
+    write-library "php-ext toml" $PHP_TOML_VER
+    write-download
+    (& cmd.exe /c "git clone https://github.com/Bedrock-Phanatics/ext-toml.git toml 2>&1") >> $log_file
+    if ($LASTEXITCODE -ne 0) { pm-fatal-error "Failed to clone ext-toml" }
+    (& cmd.exe /c "git -C toml checkout $PHP_TOML_COMMIT 2>&1") >> $log_file
+    if ($LASTEXITCODE -ne 0 -or (& git -C toml rev-parse HEAD) -ne $PHP_TOML_COMMIT) { pm-fatal-error "Failed to verify ext-toml source" }
+    write-done
+
     Pop-Location
 }
 
@@ -582,6 +592,7 @@ sdk-command "configure^`
     --enable-sockets^`
     --enable-snappy=shared^`
     --enable-tokenizer^`
+    --enable-toml^`
     --enable-xmlreader^`
     --enable-xmlwriter^`
     --enable-xxhash^`

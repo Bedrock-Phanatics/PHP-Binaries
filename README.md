@@ -122,6 +122,7 @@ This script doesn't accept parameters, but the following environment variables a
 | [arraydebug](https://github.com/pmmp/ext-arraydebug/tags) | Debugging array hash collisions | |
 | [encoding](https://github.com/pmmp/ext-encoding/releases) | Disk & network data encoding & decoding | Significantly faster alternative to [BinaryUtils](https://github.com/pmmp/BinaryUtils) |
 | [snappy](https://github.com/kjdev/php-ext-snappy/releases) | Snappy compression and decompression | Bundles the Google Snappy library |
+| [toml](https://github.com/Bedrock-Phanatics/ext-toml) | TOML config parsing | Compiled in statically, pinned by commit in `versions.env` |
 
 ### Misc
 

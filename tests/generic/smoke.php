@@ -23,7 +23,7 @@ foreach([
 	'chunkutils2', 'crypto', 'ctype', 'curl', 'date', 'encoding', 'gmp', 'hash',
 	'igbinary', 'json', 'leveldb', 'mbstring', 'morton', 'openssl', 'pcre', 'Phar',
 	'pmmpthread', 'Reflection', 'SimpleXML', 'sockets', 'SPL', 'yaml', 'zip', 'zlib',
-	'Zend OPcache', 'libdeflate', 'snappy', 'xxhash', 'fileinfo', 'gd', 'mysqli', 'recursionguard',
+	'Zend OPcache', 'libdeflate', 'snappy', 'xxhash', 'fileinfo', 'gd', 'mysqli', 'recursionguard', 'toml',
 ] as $extension){
 	check(extension_loaded($extension), "$extension is missing");
 }
@@ -38,6 +38,13 @@ check(!($opcache['jit']['enabled'] ?? false) && ($opcache['jit']['buffer_size'] 
 check(curl_init() instanceof CurlHandle, 'curl failed to initialize');
 check(version_compare(curl_version()['version'], '8.23.0', '>='), 'libcurl is outdated');
 check(OPENSSL_VERSION_NUMBER >= 0x30500090, 'OpenSSL is outdated');
+check(toml_parse("port = 19132\n[[worlds]]\nname = \"world\"") === ['port' => 19132, 'worlds' => [['name' => 'world']]], 'toml_parse failed');
+try{
+	toml_parse('port = ');
+	check(false, 'toml_parse accepted invalid TOML');
+}catch(TomlParseException $e){
+	check($e->getTomlLine() === 1, 'toml_parse reported the wrong error location');
+}
 check(Thread::getRunningCount() === 0, 'Threads are running before the test');
 
 final class Counter extends ThreadSafe{
@@ -51,6 +58,9 @@ final class CountThread extends Thread{
 		$status = opcache_get_status(false);
 		if(!is_array($status) || !$status['opcache_enabled'] || ($status['jit']['buffer_size'] ?? 0) !== 0){
 			throw new RuntimeException('OPcache failed in a thread');
+		}
+		if(toml_parse('value = 1') !== ['value' => 1]){
+			throw new RuntimeException('toml_parse failed in a thread');
 		}
 		$this->counter->synchronized(function(): void{
 			++$this->counter->value;
@@ -101,4 +111,4 @@ foreach($workers as $worker){
 check($counter->value === 48, "Synchronization failed: got $counter->value, expected 48");
 check(Thread::getRunningCount() === 0, 'Worker leaked after shutdown');
 
-echo "PHP ", PHP_VERSION, " ZTS, extensions, OPcache, threads and workers OK\n";
+echo "PHP ", PHP_VERSION, " ZTS, extensions, OPcache, TOML, threads and workers OK\n";
