@@ -132,7 +132,7 @@ echo json_encode([
 	'memory_start_bytes' => $memory,
 	'memory_peak_bytes' => memory_get_peak_usage(true),
 	'memory_after_churn_bytes' => memory_get_usage(true),
-	'peak_rss_bytes' => ($rss['ru_maxrss'] ?? 0) * 1024,
+	'peak_rss_bytes' => ($rss['ru_maxrss'] ?? 0) * (PHP_OS_FAMILY === 'Darwin' ? 1 : 1024),
 	'opcache_jit_buffer_bytes' => $opcache['jit']['buffer_size'] ?? 0,
 	'cpu_iterations_per_second_median' => round(1_000_000 / median($cpu)),
 	'worker_start_shutdown_ms_median' => round(median($threads) * 1000 / 8, 3),
