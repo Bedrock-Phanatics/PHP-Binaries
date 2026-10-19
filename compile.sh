@@ -501,10 +501,6 @@ if [ "$DO_OPTIMIZE" != "no" ]; then
 	case "${PHP_BUILD_OPTIMIZATION:-O2}" in
 		O2) CFLAGS="$CFLAGS -O2" ;;
 		O3) CFLAGS="$CFLAGS -O3" ;;
-		O2-lto)
-			CFLAGS="$CFLAGS -O2 -flto"
-			LDFLAGS="$LDFLAGS -flto"
-			;;
 		*) write_error "Unsupported PHP_BUILD_OPTIMIZATION"; exit 1 ;;
 	esac
 fi

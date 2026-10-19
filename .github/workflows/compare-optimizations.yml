@@ -33,7 +33,7 @@ jobs:
           set -euo pipefail
           source versions.env
           mkdir -p optimization-results
-          for variant in O2 O3 O2-lto; do
+          for variant in O2 O3; do
             PHP_BUILD_OPTIMIZATION="$variant" ./compile.sh \
               -t linux64 -j "$(nproc)" -g -P 5 -c ./download_cache -z 8.4
             php=bin/php7/bin/php
