@@ -62,8 +62,10 @@ final class CountThread extends Thread{
 		if(toml_parse('value = 1') !== ['value' => 1]){
 			throw new RuntimeException('toml_parse failed in a thread');
 		}
-		$this->counter->synchronized(function(): void{
-			++$this->counter->value;
+		// Resolve the shared object before taking its lock.
+		$counter = $this->counter;
+		$counter->synchronized(static function() use ($counter): void{
+			++$counter->value;
 		});
 	}
 }
@@ -76,8 +78,9 @@ final class CountTask extends Runnable{
 		if(!is_array($status) || !$status['opcache_enabled'] || ($status['jit']['buffer_size'] ?? 0) !== 0){
 			throw new RuntimeException('OPcache failed in a worker');
 		}
-		$this->counter->synchronized(function(): void{
-			++$this->counter->value;
+		$counter = $this->counter;
+		$counter->synchronized(static function() use ($counter): void{
+			++$counter->value;
 		});
 	}
 }
@@ -96,19 +99,26 @@ for($round = 0; $round < 4; ++$round){
 	check(Thread::getRunningCount() === 0, 'Thread leaked after join');
 }
 
-$workers = [];
-for($i = 0; $i < 4; ++$i){
-	$worker = new Worker();
-	check($worker->start(0), 'Worker creation failed');
-	for($task = 0; $task < 8; ++$task){
-		check($worker->stack(new CountTask($counter)) > 0, 'Worker task was not queued');
+for($round = 0; $round < 8; ++$round){
+	$workers = [];
+	for($i = 0; $i < 4; ++$i){
+		$worker = new Worker();
+		check($worker->start(0), 'Worker creation failed');
+		for($task = 0; $task < 8; ++$task){
+			check($worker->stack(new CountTask($counter)) > 0, 'Worker task was not queued');
+		}
+		$workers[] = $worker;
 	}
-	$workers[] = $worker;
+	foreach($workers as $worker){
+		$worker->synchronized(static function() use ($worker): void{
+			while($worker->collect() > 0){
+				$worker->wait();
+			}
+		});
+		check($worker->shutdown() && $worker->isShutdown() && !$worker->isTerminated(), 'Worker did not shut down cleanly');
+	}
+	check(Thread::getRunningCount() === 0, 'Worker leaked after shutdown');
 }
-foreach($workers as $worker){
-	check($worker->shutdown() && $worker->isShutdown() && !$worker->isTerminated(), 'Worker did not shut down cleanly');
-}
-check($counter->value === 48, "Synchronization failed: got $counter->value, expected 48");
-check(Thread::getRunningCount() === 0, 'Worker leaked after shutdown');
+check($counter->value === 272, "Synchronization failed: got $counter->value, expected 272");
 
 echo "PHP ", PHP_VERSION, " ZTS, extensions, OPcache, TOML, threads and workers OK\n";

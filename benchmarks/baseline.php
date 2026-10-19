@@ -29,8 +29,10 @@ final class IncrementTask extends Runnable{
 	public function __construct(private Counter $counter){}
 
 	public function run(): void{
-		$this->counter->synchronized(function(): void{
-			++$this->counter->value;
+		// Resolve the shared object before taking its lock.
+		$counter = $this->counter;
+		$counter->synchronized(static function() use ($counter): void{
+			++$counter->value;
 		});
 	}
 }
