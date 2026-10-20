@@ -1,4 +1,4 @@
-name: Build and publish PHP binaries
+name: Build and publish Quark PHP binaries
 
 on:
   push:
@@ -13,7 +13,7 @@ concurrency:
 
 jobs:
   all-builds:
-    name: PM${{ matrix.pm-version-major }} - PHP ${{ matrix.php-version-base }}
+    name: Quark v6 - PHP ${{ matrix.php-version-base }}
     permissions:
       contents: write
     strategy:
@@ -32,7 +32,7 @@ jobs:
     secrets: inherit
 
   publish-archive-release:
-    name: Publish archive release
+    name: Publish Quark archive release
     needs: [all-builds]
     runs-on: ubuntu-22.04
     permissions:
@@ -40,29 +40,37 @@ jobs:
     if: ${{ github.ref_name == 'stable' && github.ref_type == 'branch' && !contains(github.event.head_commit.message, '[no release]') }}
 
     steps:
+      - uses: actions/checkout@v7
+
       - name: Download artifacts
         uses: actions/download-artifact@v8
         with:
           path: ${{ github.workspace }}
 
+      - name: Verify release assets and write checksums
+        run: bash tests/prepare-release.sh 5
+
       - name: Generate release notes
         run: |
+          source versions.env
           {
+            echo "Quark v6 PHP $PHP_VERSION ZTS"
+            echo
             echo "Built by: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-            echo "Build number: ${{ github.run_number }}"
+            echo "Source: ${{ github.sha }}"
+            echo "qthreads: $EXT_QTHREADS_COMMIT"
             echo
             echo ':information_source: **Linux users**: Choose `x86_64` or `arm64` based on the CPU architecture of the server that runs PHP.'
             echo ':package: **Game hosting / panel users**: Use the matching `-hosting.tar.gz` build if your host/file manager does not preserve Unix symbolic links.'
             echo ":warning: **Windows users**: Install [Visual C++ Redistributable](https://aka.ms/vs/17/release/vc_redist.x64.exe) or the binary will not work."
+            echo 'SHA-256 checksums are in `SHA256SUMS`.'
           } > changelog.md
 
       - name: Create archive release
         uses: ncipollo/release-action@v1.21.0
         with:
-          artifacts: |
-            ${{ github.workspace }}/*PHP-*-PM*/*.tar.gz
-            ${{ github.workspace }}/*PHP-*-Windows-*-PM*/*.zip
-          name: PHP (Build ${{ github.run_number }}) - Archive
+          artifacts: ${{ github.workspace }}/release-assets/*
+          name: Quark v6 PHP 8.4 (Build ${{ github.run_number }}) - Archive
           tag: php-build-${{ github.run_number }}
           commit: ${{ github.sha }}
           allowUpdates: false

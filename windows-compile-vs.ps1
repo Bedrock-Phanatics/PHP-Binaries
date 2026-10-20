@@ -47,8 +47,8 @@ $windowsDepsHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $windowsDepsLock
 function pm-echo {
     param ([string] $message)
 
-    echo "[PocketMine] $message"
-    echo "[PocketMine] $message" >> "$log_file"
+    echo "[Quark] $message"
+    echo "[Quark] $message" >> "$log_file"
 }
 
 function pm-echo-error {
@@ -165,12 +165,12 @@ function php-version-id {
 $PREFERRED_PHP_VERSION_BASE=""
 switch ($env:PM_VERSION_MAJOR) {
     5 { $PREFERRED_PHP_VERSION_BASE="8.4" }
-    $null { pm-fatal-error "Please specify PocketMine-MP major version by setting the PM_VERSION_MAJOR environment variable" }
-    default { pm-fatal-error "PocketMine-MP $PM_VERSION_MAJOR is not supported by this version of the build script" }
+    $null { pm-fatal-error "Set PM_VERSION_MAJOR=5 for the Quark v6 build" }
+    default { pm-fatal-error "Legacy build target $env:PM_VERSION_MAJOR is not supported" }
 }
 
 $PM_VERSION_MAJOR=$env:PM_VERSION_MAJOR
-pm-echo "Compiling with configuration for PocketMine-MP $PM_VERSION_MAJOR"
+pm-echo "Compiling PHP for Quark v6"
 
 if ($PHP_VERSION_BASE -eq "auto") {
     $PHP_VERSION_BASE=$PREFERRED_PHP_VERSION_BASE
@@ -654,7 +654,7 @@ write-status "generating php.ini"
 $php_ini="$outpath\bin\php\php.ini"
 
 #all this work to make PS output utf-8/ascii instead of utf-16 :(
-Out-File -FilePath $php_ini -Encoding ascii -InputObject ";Custom PocketMine-MP php.ini file"
+Out-File -FilePath $php_ini -Encoding ascii -InputObject ";Quark PHP configuration"
 append-file-utf8 "memory_limit=1024M" $php_ini
 append-file-utf8 "display_errors=1" $php_ini
 append-file-utf8 "display_startup_errors=1" $php_ini
@@ -700,6 +700,10 @@ append-file-utf8 "xdebug.profiler_output_name=cachegrind.%s.%p.%r" $php_ini
 append-file-utf8 "xdebug.gc_stats_output_name=gcstats.%s.%p.%r" $php_ini
 append-file-utf8 "xdebug.trace_output_name=trace.%s.%p.%r" $php_ini
 write-done
+Remove-Item -LiteralPath "$outpath\bin\php\dev\php8ts.lib" -ErrorAction SilentlyContinue
+Remove-Item -LiteralPath "$outpath\bin\php\dev" -ErrorAction SilentlyContinue
+Remove-Item -LiteralPath "$outpath\bin\php\deplister.exe", "$outpath\bin\php\news.txt", "$outpath\bin\php\snapshot.txt", "$outpath\bin\php\README.md", "$outpath\bin\php\php.ini-development", "$outpath\bin\php\php.ini-production" -ErrorAction SilentlyContinue
+
 pm-echo "Xdebug is included, but disabled by default. To enable it, change 'xdebug.mode' in your php.ini file."
 
 pm-echo "NOTE: You may need to install VC++ Redistributable for the binaries to work. Download it here: https://aka.ms/vs/17/release/vc_redist.x64.exe"

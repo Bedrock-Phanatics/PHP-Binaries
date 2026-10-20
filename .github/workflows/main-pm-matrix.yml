@@ -1,10 +1,10 @@
-name: Build PHP binaries
+name: Build Quark PHP binaries
 
 on:
   workflow_call:
     inputs:
       pm-version-major:
-        description: "PocketMine-MP major version"
+        description: "Legacy PM build target (5 for Quark v6)"
         required: true
         type: number
       php-version-base:
@@ -24,6 +24,8 @@ jobs:
   linux:
     name: Linux ${{ matrix.arch }}
     runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: read
     strategy:
       fail-fast: false
       matrix:
@@ -59,6 +61,7 @@ jobs:
           ./compile.sh \
             -t "${{ matrix.target }}" \
             -j "$(nproc)" \
+            -D \
             -g \
             -P "${{ inputs.pm-version-major }}" \
             -c ./download_cache \
@@ -146,11 +149,23 @@ jobs:
           mkdir -p package-check/normal package-check/hosting
           tar -xzf "$NORMAL_ARCHIVE" -C package-check/normal
           tar -xzf "$HOSTING_ARCHIVE" -C package-check/hosting
-          bash tests/test.sh generic package-check/normal/bin/php7/bin/php
-          bash tests/test.sh generic package-check/hosting/bin/php7/bin/php
+          for root in package-check/normal package-check/hosting; do
+            while IFS= read -r -d '' library; do
+              links="$(ldd "$library")"
+              if grep 'not found' <<< "$links"; then
+                echo "::error::$library has missing shared libraries"
+                exit 1
+              fi
+            done < <(find "$root/bin" -type f \( -name php -o -name '*.so' -o -name '*.so.*' \) -print0)
+            for attempt in 1 2 3 4 5; do
+              bash tests/test.sh generic "$root/bin/php7/bin/php"
+            done
+          done
 
           OPCACHE="$(find bin/php7/lib/php/extensions -name opcache.so -print -quit)"
           timeout 30s "$PHP_BINARY" -c bin/php7/bin/php.ini -d "extension_dir=$(dirname "$OPCACHE")" benchmarks/baseline.php > benchmark.json
+
+          tar -czf "Quark-PHP-${PHP_VERSION}-linux-${{ matrix.arch }}-symbols.tar.gz" bin-debug
 
           echo "Created:"
           ls -lh "$NORMAL_ARCHIVE" "$HOSTING_ARCHIVE"
@@ -162,12 +177,15 @@ jobs:
           path: |
             ./PHP-${{ inputs.php-version-base }}-Linux-${{ matrix.arch }}-PM${{ inputs.pm-version-major }}.tar.gz
             ./PHP-${{ inputs.php-version-base }}-Linux-${{ matrix.arch }}-PM${{ inputs.pm-version-major }}-hosting.tar.gz
+            ./Quark-PHP-*-linux-${{ matrix.arch }}-symbols.tar.gz
             ./benchmark.json
           if-no-files-found: error
 
   macos:
     name: MacOS ${{ matrix.arch }}
     runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: read
     strategy:
       fail-fast: false
       matrix:
@@ -201,6 +219,7 @@ jobs:
           ./compile.sh \
             -t "${{ matrix.target }}" \
             -j 4 \
+            -D \
             -g \
             -P "${{ inputs.pm-version-major }}" \
             -c ./download_cache \
@@ -225,9 +244,20 @@ jobs:
           tar -czf "$ARCHIVE" bin
           mkdir package-check
           tar -xzf "$ARCHIVE" -C package-check
-          bash tests/test.sh generic package-check/bin/php7/bin/php
+          while IFS= read -r -d '' library; do
+            links="$(otool -L "$library")"
+            external="$(printf '%s\n' "$links" | awk 'NR > 1 { print $1 }' | grep -Ev '^(/usr/lib/|/System/|@loader_path|@executable_path|@rpath)' || true)"
+            if [ -n "$external" ]; then
+              echo "::error::$library links to an unbundled library: $external"
+              exit 1
+            fi
+          done < <(find package-check/bin -type f \( -name php -o -name '*.so' -o -name '*.so.*' -o -name '*.dylib' -o -name '*.dylib.*' \) -print0)
+          for attempt in 1 2 3 4 5; do
+            bash tests/test.sh generic package-check/bin/php7/bin/php
+          done
           OPCACHE="$(find bin/php7/lib/php/extensions -name opcache.so -print -quit)"
           "$PHP_BINARY" -c bin/php7/bin/php.ini -d "extension_dir=$(dirname "$OPCACHE")" benchmarks/baseline.php > benchmark.json
+          tar -czf "Quark-PHP-${PHP_VERSION}-macos-${{ matrix.arch }}-symbols.tar.gz" bin-debug
 
       - name: Upload MacOS binary
         uses: actions/upload-artifact@v7
@@ -235,12 +265,15 @@ jobs:
           name: PHP-${{ inputs.php-version-base }}-MacOS-${{ matrix.arch }}-PM${{ inputs.pm-version-major }}
           path: |
             ./PHP-${{ inputs.php-version-base }}-MacOS-${{ matrix.arch }}-PM${{ inputs.pm-version-major }}.tar.gz
+            ./Quark-PHP-*-macos-${{ matrix.arch }}-symbols.tar.gz
             ./benchmark.json
           if-no-files-found: error
 
   windows:
     name: Windows x64
     runs-on: windows-2022
+    permissions:
+      contents: read
 
     steps:
       - uses: actions/checkout@v7
@@ -277,6 +310,10 @@ jobs:
           & $php -c .\bin\php\php.ini .\benchmarks\baseline.php > benchmark.json
           if ($LASTEXITCODE -ne 0) { throw "PHP benchmarks failed" }
 
+          $symbols = @(Get-ChildItem -LiteralPath . -Filter 'php-debug-pack-*.zip')
+          if ($symbols.Count -ne 1) { throw "Expected one Windows debug pack" }
+          Copy-Item -LiteralPath $symbols[0].FullName -Destination "Quark-PHP-$expected-windows-x64-symbols.zip"
+
           Compress-Archive `
             -Path .\bin `
             -DestinationPath "PHP-${{ inputs.php-version-base }}-Windows-x64-PM${{ inputs.pm-version-major }}.zip"
@@ -284,8 +321,10 @@ jobs:
           Expand-Archive `
             -Path "PHP-${{ inputs.php-version-base }}-Windows-x64-PM${{ inputs.pm-version-major }}.zip" `
             -DestinationPath .\package-check
-          & .\package-check\bin\php\php.exe -c .\package-check\bin\php\php.ini .\tests\generic\smoke.php
-          if ($LASTEXITCODE -ne 0) { throw "Packaged PHP smoke tests failed" }
+          1..5 | ForEach-Object {
+            & .\package-check\bin\php\php.exe -c .\package-check\bin\php\php.ini .\tests\generic\smoke.php
+            if ($LASTEXITCODE -ne 0) { throw "Packaged PHP thread stress failed on iteration $_" }
+          }
 
       - name: Upload Windows binary
         uses: actions/upload-artifact@v7
@@ -293,11 +332,12 @@ jobs:
           name: PHP-${{ inputs.php-version-base }}-Windows-x64-PM${{ inputs.pm-version-major }}
           path: |
             ./PHP-${{ inputs.php-version-base }}-Windows-x64-PM${{ inputs.pm-version-major }}.zip
+            ./Quark-PHP-*-windows-x64-symbols.zip
             ./benchmark.json
           if-no-files-found: error
 
   publish:
-    name: Publish binaries
+    name: Publish Quark binaries
     needs: [linux, macos, windows]
     runs-on: ubuntu-22.04
     if: ${{ github.ref_name == 'stable' && github.ref_type == 'branch' && !contains(github.event.head_commit.message, '[no release]') }}
@@ -309,55 +349,46 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - name: Update latest tags
-        run: |
-          git tag -f "pm${{ inputs.pm-version-major }}-php-${{ inputs.php-version-base }}-latest"
-          git push -f origin "pm${{ inputs.pm-version-major }}-php-${{ inputs.php-version-base }}-latest"
-          git tag -f "pm${{ inputs.pm-version-major }}-latest"
-          git push -f origin "pm${{ inputs.pm-version-major }}-latest"
-
       - name: Download build artifacts
         uses: actions/download-artifact@v8
         with:
           path: ${{ github.workspace }}
           pattern: "*PHP-${{ inputs.php-version-base }}-*-PM${{ inputs.pm-version-major }}"
 
+      - name: Verify release assets and write checksums
+        run: bash tests/prepare-release.sh "${{ inputs.pm-version-major }}"
+
       - name: Generate release notes
         run: |
           {
-            echo "### PHP ${{ inputs.php-version-base }} for PocketMine-MP ${{ inputs.pm-version-major }}.x"
+            source versions.env
+            echo "### Quark v6 PHP $PHP_VERSION ZTS"
             echo
             echo "Last updated on **$(date -u +'%d %b %Y at %H:%M:%S %Z')**"
             echo
             echo "Built by: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-            echo "Build number: ${{ github.run_number }}"
+            echo "Source: ${{ github.sha }}"
+            echo "qthreads: $EXT_QTHREADS_COMMIT"
             echo
             echo ':information_source: **Linux users**: Choose `x86_64` or `arm64` based on the CPU architecture of the server that will run PHP, not the phone/PC used to upload the files.'
             echo ':package: **Game hosting / panel users**: Use the matching `-hosting.tar.gz` Linux build if your host/file manager does not preserve Unix symbolic links.'
-            echo ":information_source: **Linux/MacOS users**: See [this page](https://doc.pmmp.io/en/rtfd/faq/installation/opcache.so.html) for extension loading errors."
             echo ":warning: **Windows users**: Install [Visual C++ Redistributable](https://aka.ms/vs/17/release/vc_redist.x64.exe) or the binary will not work."
+            echo "SHA-256 checksums are in \`SHA256SUMS\`."
             echo
           } > changelog.md
 
-          if [[ "${{ inputs.special-release }}" != "none" ]]; then
-            echo ":white_check_mark: At the time of publication, this version is recommended for PocketMine-MP ${{ inputs.pm-version-major }}.x production servers." >> changelog.md
-          else
-            echo ":warning: At the time of publication, plugins for PocketMine-MP ${{ inputs.pm-version-major }}.x may not work with this PHP version." >> changelog.md
-            echo "If you have problems, try the [recommended PM${{ inputs.pm-version-major }} release](${{ github.server_url }}/${{ github.repository }}/releases/pm${{ inputs.pm-version-major }}-latest)." >> changelog.md
-          fi
+          echo "The PM5 asset names and release tags remain for existing installers." >> changelog.md
 
       - name: Get date
         id: date
         run: echo "DATE=$(date -u +'%d %b %Y')" >> "$GITHUB_OUTPUT"
 
-      - name: Update recommended PM release
+      - name: Update Quark release at the legacy latest tag
         uses: ncipollo/release-action@v1.21.0
         if: ${{ inputs.special-release != 'none' }}
         with:
-          artifacts: |
-            ${{ github.workspace }}/*PHP-*-PM*/*.tar.gz
-            ${{ github.workspace }}/*PHP-*-Windows-*-PM*/*.zip
-          name: PM ${{ inputs.pm-version-major }}.x (${{ steps.date.outputs.DATE }}) - Recommended
+          artifacts: ${{ github.workspace }}/release-assets/*
+          name: Quark v6 PHP ${{ inputs.php-version-base }} (${{ steps.date.outputs.DATE }})
           tag: pm${{ inputs.pm-version-major }}-latest
           commit: ${{ github.sha }}
           allowUpdates: true
@@ -366,13 +397,11 @@ jobs:
           makeLatest: ${{ inputs.special-release == 'default-latest' }}
           prerelease: ${{ inputs.pm-preview == true }}
 
-      - name: Update PHP-version PM release
+      - name: Update PHP-version release at the legacy tag
         uses: ncipollo/release-action@v1.21.0
         with:
-          artifacts: |
-            ${{ github.workspace }}/*PHP-*-PM*/*.tar.gz
-            ${{ github.workspace }}/*PHP-*-Windows-*-PM*/*.zip
-          name: PM ${{ inputs.pm-version-major }}.x (${{ steps.date.outputs.DATE }}) - PHP ${{ inputs.php-version-base }}
+          artifacts: ${{ github.workspace }}/release-assets/*
+          name: Quark v6 PHP ${{ inputs.php-version-base }} (${{ steps.date.outputs.DATE }})
           tag: pm${{ inputs.pm-version-major }}-php-${{ inputs.php-version-base }}-latest
           commit: ${{ github.sha }}
           allowUpdates: true
@@ -380,3 +409,10 @@ jobs:
           bodyFile: ${{ github.workspace }}/changelog.md
           makeLatest: false
           prerelease: ${{ inputs.pm-preview == true }}
+
+      - name: Move compatibility tags after publishing
+        run: |
+          git tag -f "pm${{ inputs.pm-version-major }}-php-${{ inputs.php-version-base }}-latest"
+          git push -f origin "pm${{ inputs.pm-version-major }}-php-${{ inputs.php-version-base }}-latest"
+          git tag -f "pm${{ inputs.pm-version-major }}-latest"
+          git push -f origin "pm${{ inputs.pm-version-major }}-latest"
