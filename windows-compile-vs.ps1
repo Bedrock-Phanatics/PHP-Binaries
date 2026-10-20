@@ -12,7 +12,7 @@ $LIBYAML_VER=$versions.YAML_VERSION
 $PTHREAD_W32_VER=$versions.PTHREADS4W_VERSION
 $LEVELDB_MCPE_VER=$versions.LEVELDB_VERSION
 $LIBDEFLATE_VER=$versions.LIBDEFLATE_VERSION
-$PHP_PMMPTHREAD_VER=$versions.EXT_PMMPTHREAD_VERSION
+$PHP_QTHREADS_COMMIT=$versions.EXT_QTHREADS_COMMIT
 $PHP_YAML_VER=$versions.EXT_YAML_VERSION
 $PHP_CHUNKUTILS2_VER=$versions.EXT_CHUNKUTILS2_VERSION
 $PHP_IGBINARY_VER=$versions.EXT_IGBINARY_VERSION
@@ -470,7 +470,7 @@ function get-github-extension {
 
 function download-php-extensions {
     Push-Location "$SOURCES_PATH\ext" >> $log_file 2>&1
-    get-github-extension "pmmpthread" $PHP_PMMPTHREAD_VER "pmmp" "ext-pmmpthread"
+    get-github-extension "pmmpthread" $PHP_QTHREADS_COMMIT "Bedrock-Phanatics" "ext-qthreads"
     get-github-extension "yaml"                  $PHP_YAML_VER                  "php"      "pecl-file_formats-yaml"
     get-github-extension "chunkutils2"           $PHP_CHUNKUTILS2_VER           "pmmp"     "ext-chunkutils2"
     get-github-extension "igbinary"              $PHP_IGBINARY_VER              "igbinary" "igbinary"

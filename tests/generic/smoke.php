@@ -5,6 +5,7 @@ declare(strict_types=1);
 use pmmp\thread\Runnable;
 use pmmp\thread\Thread;
 use pmmp\thread\ThreadSafe;
+use pmmp\thread\ThreadSafeQueue;
 use pmmp\thread\Worker;
 
 function check(bool $condition, string $message): void{
@@ -30,6 +31,8 @@ foreach([
 if(PHP_OS_FAMILY === 'Windows'){
 	check(extension_loaded('sqlite3'), 'sqlite3 is missing');
 }
+check((new ReflectionExtension('pmmpthread'))->getVersion() === '6.4.0', 'qthreads version mismatch');
+check(class_exists(ThreadSafeQueue::class), 'qthreads queue is missing');
 
 check(ini_get('opcache.enable_cli') === '1', 'OPcache is disabled for CLI');
 $opcache = opcache_get_status(false);
@@ -52,7 +55,7 @@ final class Counter extends ThreadSafe{
 }
 
 final class CountThread extends Thread{
-	public function __construct(private Counter $counter){}
+	public function __construct(private Counter $counter, private ThreadSafeQueue $queue){}
 
 	public function run(): void{
 		$status = opcache_get_status(false);
@@ -62,6 +65,7 @@ final class CountThread extends Thread{
 		if(toml_parse('value = 1') !== ['value' => 1]){
 			throw new RuntimeException('toml_parse failed in a thread');
 		}
+		$this->queue->push('thread');
 		// Resolve the shared object before taking its lock.
 		$counter = $this->counter;
 		$counter->synchronized(static function() use ($counter): void{
@@ -71,13 +75,14 @@ final class CountThread extends Thread{
 }
 
 final class CountTask extends Runnable{
-	public function __construct(private Counter $counter){}
+	public function __construct(private Counter $counter, private ThreadSafeQueue $queue){}
 
 	public function run(): void{
 		$status = opcache_get_status(false);
 		if(!is_array($status) || !$status['opcache_enabled'] || ($status['jit']['buffer_size'] ?? 0) !== 0){
 			throw new RuntimeException('OPcache failed in a worker');
 		}
+		$this->queue->push('worker');
 		$counter = $this->counter;
 		$counter->synchronized(static function() use ($counter): void{
 			++$counter->value;
@@ -86,10 +91,11 @@ final class CountTask extends Runnable{
 }
 
 $counter = new Counter();
+$queue = new ThreadSafeQueue();
 for($round = 0; $round < 4; ++$round){
 	$threads = [];
 	for($i = 0; $i < 4; ++$i){
-		$thread = new CountThread($counter);
+		$thread = new CountThread($counter, $queue);
 		check($thread->start(0), 'Thread creation failed');
 		$threads[] = $thread;
 	}
@@ -105,7 +111,7 @@ for($round = 0; $round < 8; ++$round){
 		$worker = new Worker();
 		check($worker->start(0), 'Worker creation failed');
 		for($task = 0; $task < 8; ++$task){
-			check($worker->stack(new CountTask($counter)) > 0, 'Worker task was not queued');
+			check($worker->stack(new CountTask($counter, $queue)) > 0, 'Worker task was not queued');
 		}
 		$workers[] = $worker;
 	}
@@ -120,5 +126,14 @@ for($round = 0; $round < 8; ++$round){
 	check(Thread::getRunningCount() === 0, 'Worker leaked after shutdown');
 }
 check($counter->value === 272, "Synchronization failed: got $counter->value, expected 272");
+$transfers = ['thread' => 0, 'worker' => 0];
+for($i = 0; $i < 272; ++$i){
+	$value = $queue->pop(0);
+	check(isset($transfers[$value]), 'Invalid cross-thread transfer');
+	++$transfers[$value];
+}
+check($transfers === ['thread' => 16, 'worker' => 256], 'Cross-thread transfers were lost');
+$queue->close();
+check($queue->isClosed() && $queue->pop(0) === null, 'Queue did not close cleanly');
 
-echo "PHP ", PHP_VERSION, " ZTS, extensions, OPcache, TOML, threads and workers OK\n";
+echo "PHP ", PHP_VERSION, " ZTS, extensions, OPcache, TOML, threads, workers and qthreads queue OK\n";

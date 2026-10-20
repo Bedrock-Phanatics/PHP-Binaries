@@ -18,7 +18,7 @@ CI checks the Quark v6 PHP runtime requirements: PHP 8.4+, ZTS, required extensi
 
 On Linux or macOS, run `bash tests/test.sh generic bin/php7/bin/php`. On Windows, run `bin\php\php.exe -c bin\php\php.ini tests\generic\smoke.php`.
 
-`benchmarks/baseline.php` records startup, CPU throughput, worker startup and task throughput, allocation churn, PHP heap use, and peak RSS. CI saves each build's `benchmark.json` with its archive. Run the `Compare PHP compiler options` workflow to build and test O2, O3, and O2 with LTO on the same Linux runner; it saves three benchmark samples per build. These measurements are baselines, not release thresholds.
+`benchmarks/baseline.php` records startup, CPU throughput, worker startup and task throughput, allocation churn, PHP heap use, and peak RSS. CI saves each build's `benchmark.json` with its archive. Run the `Compare PHP compiler options` workflow to build and test O2 and O3 on the same Linux runner; it saves three benchmark samples per build. These measurements are baselines, not release thresholds.
 
 O2 remains the release setting until a compiler variant improves the Quark workload without failing smoke and allocator checks. PGO needs representative server training traffic, so the current synthetic benchmark is not used as a PGO profile. No alternate allocator is bundled without a measured gain in sustained memory use and worker throughput.
 
@@ -101,14 +101,14 @@ This script doesn't accept parameters, but the following environment variables a
 | [libzip](https://github.com/nih-at/libzip/releases) | Resource packs | |
 | [sqlite3](https://sqlite.org/download.html) | Plugin use only | Hosted at [DependencyMirror](https://github.com/pmmp/DependencyMirror/releases) to avoid service outages |
 | [libdeflate](https://github.com/ebiggers/libdeflate/blob/master/NEWS.md) | Faster alternative to zlib for network use | |
-| [pthreads4w](https://sourceforge.net/projects/pthreads4w/files/) | Needed by ext-pmmpthread on Windows | Hosted at [DependencyMirror](https://github.com/pmmp/DependencyMirror/releases) to avoid service outages |
+| [pthreads4w](https://sourceforge.net/projects/pthreads4w/files/) | Needed by ext-qthreads on Windows | Hosted at [DependencyMirror](https://github.com/pmmp/DependencyMirror/releases) to avoid service outages |
 
 ### PHP & extensions
 
 | Link to package | Needed for | Notes |
 |:----------------|:-----------|:------|
 | [PHP](https://www.php.net/releases/?json&version=8.4) | Everything | PHP is currently pinned to the 8.4 series |
-| [pmmpthread](https://github.com/pmmp/ext-pmmpthread/releases) | PHP threading | |
+| [qthreads](https://github.com/Bedrock-Phanatics/ext-qthreads) | PHP threading | Provides the `pmmpthread` module and `pmmp\thread` API, replacing ext-pmmpthread at a pinned commit |
 | [yaml](https://github.com/php/pecl-file_formats-yaml/tags) | YAML config parsing | Yes, the mix of - and _ is intentional. Don't ask me. |
 | [leveldb](https://github.com/pmmp/php-leveldb/commits/pmmp-mojang-compatible/) | Bedrock world support | Custom version to provide `LEVELDB_ZLIB_RAW_COMPRESSION` support |
 | [chunkutils2](https://github.com/pmmp/ext-chunkutils2/releases) | `PalettedBlockArray` and other low-level stuff | |
@@ -123,6 +123,8 @@ This script doesn't accept parameters, but the following environment variables a
 | [encoding](https://github.com/pmmp/ext-encoding/releases) | Disk & network data encoding & decoding | Significantly faster alternative to [BinaryUtils](https://github.com/pmmp/BinaryUtils) |
 | [snappy](https://github.com/kjdev/php-ext-snappy/releases) | Snappy compression and decompression | Bundles the Google Snappy library |
 | [toml](https://github.com/TrixNEW/ext-toml) | TOML config parsing | Compiled in statically, pinned by commit in `versions.env` |
+
+`ext-bedwire` is not bundled yet. Its current build requires Zig 0.17 and its upstream CI covers Linux only. Quark's current extension requirements do not include it. The existing LevelDB and packet extensions remain in the builds.
 
 ### Misc
 
