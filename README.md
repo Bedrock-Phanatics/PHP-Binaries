@@ -1,133 +1,33 @@
-# PHP binaries & PHP build scripts for PocketMine-MP
-[![Build status](https://github.com/Bedrock-Phanatics/PHP-Binaries/actions/workflows/main.yml/badge.svg)](https://github.com/Bedrock-Phanatics/PHP-Binaries/actions/workflows/main.yml)
+# Quark PHP binaries
 
-## Prebuilt binaries
-### Actively updated "latest" URLs
-- [PM5 default](https://github.com/Bedrock-Phanatics/PHP-Binaries/releases/tag/pm5-latest)
-- [PM5 PHP 8.4](https://github.com/Bedrock-Phanatics/PHP-Binaries/releases/tag/pm5-php-8.4-latest) (default)
+PHP 8.4 ZTS builds for Quark v6. Source versions are pinned in `versions.env`, source archives are checked against `sources.sha256`, and Windows SDK dependencies are checked against `windows-deps.sha256`.
 
-### Game hosting
+## Downloads
 
-If your host or file manager does not preserve Linux symbolic (and you can't use the [Egg](https://github.com/Bedrock-Phanatics/Quark-Egg)) links, use the `-hosting.tar.gz` Linux build.
+The [latest release](https://github.com/Bedrock-Phanatics/PHP-Binaries/releases/tag/pm5-latest) contains Linux x86_64/ARM64, macOS x86_64/ARM64, and Windows x64 builds. The `pm5-latest` and `pm5-php-8.4-latest` tags and `PHP-8.4-...-PM5` filenames remain for existing installers. All runtime archives extract to `bin/`.
 
-Delete your existing `bin/` folder, then extract or upload the new `bin/` folder into your server root. Use the normal Linux build for standard Linux/SSH installations.
+Use the Linux `-hosting.tar.gz` archive when a host or file manager cannot preserve symlinks. It contains the same runtime files with library links resolved. Replace the existing server `bin/` directory before extracting a new archive.
 
-### Validation and benchmarks
+The release workflow includes `SHA256SUMS` and separate `Quark-PHP-...-symbols` archives. Production archives omit those debug symbols. Windows requires the [Visual C++ Redistributable](https://aka.ms/vs/17/release/vc_redist.x64.exe).
 
-CI checks the Quark v6 PHP runtime requirements: PHP 8.4+, ZTS, required extensions, OPcache, thread and worker lifecycles, synchronized work, and clean shutdown on Linux x86_64/ARM64, macOS x86_64/ARM64, and Windows x64. It repeats the checks after extracting each archive. A failed check blocks artifact upload and releases.
+## Runtime
 
-On Linux or macOS, run `bash tests/test.sh generic bin/php7/bin/php`. On Windows, run `bin\php\php.exe -c bin\php\php.ini tests\generic\smoke.php`.
+The build uses PHP 8.4 ZTS, OPcache for CLI, and qthreads as the `pmmpthread` module. JIT is disabled. LevelDB, chunkutils2, crypto, encoding, igbinary, libdeflate, morton, snappy, TOML, and the other bundled extensions remain available for Quark and plugins. `ext-bedwire` is not packaged while its platform support and Quark integration remain unverified.
 
-`benchmarks/baseline.php` records startup, CPU throughput, worker startup and task throughput, allocation churn, PHP heap use, and peak RSS. CI saves each build's `benchmark.json` with its archive. Run the `Compare PHP compiler options` workflow to build and test O2 and O3 on the same Linux runner; it saves three benchmark samples per build. These measurements are baselines, not release thresholds.
+## Building
 
-O2 remains the release setting until a compiler variant improves the Quark workload without failing smoke and allocator checks. PGO needs representative server training traffic, so the current synthetic benchmark is not used as a PGO profile. No alternate allocator is bundled without a measured gain in sustained memory use and worker throughput.
+On Linux or macOS, install the platform build tools and run:
 
-Build versions are pinned in `versions.env`. `sources.sha256` verifies source archives, and `windows-deps.sha256` locks the official PHP 8.4 Windows dependency packages. Update the version and checksum together when changing a dependency. Download caches are checked before use, and Windows reuses installed dependencies when the lockfiles and build script have not changed.
+```sh
+./compile.sh -t linux64 -j 4 -P5 -z 8.4 -D -c ./download_cache
+```
 
-## compile.sh
+Use `linux-arm64`, `mac-x86-64`, or `mac-arm64` for other supported targets. `-P5` is the retained build target selector for compatibility with existing automation. `-D` separates debug symbols into `bin-debug/`; the runtime is installed under `bin/`.
 
-Bash script used to compile PHP on MacOS and Linux platforms. Make sure you have ``make autoconf automake libtool m4 wget getconf gzip bzip2 bison g++ git cmake pkg-config re2c ca-certificates``.
+On Windows, install Visual Studio 2022, CMake, and Git, then set `PM_VERSION_MAJOR=5` and `PHP_VERSION_BASE=8.4` before running `windows-compile-vs.ps1`. The Windows build writes `bin/` and a separate PHP debug pack.
 
-### Recommendations
-- If you're going to use the compiled binary only on the machine you're build it on, remove the `-t` option for best performance - this will allow the script to optimize for the current machine rather than a generic one.
-- [`ext-gd2`](https://www.php.net/manual/en/book.image.php) is NOT included unless the `-g` flag is provided, as PocketMine-MP doesn't need it. However, if your plugins need it, don't forget to enable it using `-g`.
-- The `-c` and `-l` options can be used to specify cache folders to speed up recompiling if you're recompiling many times (e.g. to improve the script).
+## Verification
 
-### Common pitfalls
-- Avoid using the script in directory trees containing spaces. Some libraries don't like trying to be built in directory trees containing spaces, e.g. `/home/user/my folder/pocketmine-mp/` might experience problems.
-- Avoid directory trees containing special (non-English) symbols. For example, `Développement` might cause issues.
+CI builds every supported platform, checks the exact PHP version, architecture, ZTS, required extensions, OPcache, thread and worker behavior, and packaged runtime startup. It repeats thread tests from extracted archives and blocks releases on a failed build or test. Linux hosting archives are checked for broken symlinks. Release jobs verify the complete archive set and write SHA-256 checksums before publishing.
 
-### Additional notes
-#### Mac OSX (native compile)
-- Most dependencies can be installed using Homebrew
-- You will additionally need `glibtool` (GNU libtool, xcode libtool won't work)
-
-#### Android 64-bit (cross-compile)
-- Only aarch64 targets are supported for Android cross-compile.
-- The `aarch64-linux-musl` toolchain is required. You can compile and install it using https://github.com/pmmp/musl-cross-make (PMMP fork includes musl-libc patches for DNS resolver config path and increasing stack size limit for LevelDB)
-
-| Script flags | Description                                                                                                 |
-|--------------|-------------------------------------------------------------------------------------------------------------|
-| -c           | Uses the folder specified for caching downloaded tarballs, zipballs etc.                                    |
-| -d           | Compiles with debugging symbols and disables optimizations (slow, but useful for debugging segfaults)       |
-| -D           | Compiles with separated debugging symbols, but leaves optimizations enabled (used for distributed binaries) |
-| -g           | Will compile GD2                                                                                            |
-| -j           | Set make threads to #                                                                                       |
-| -l           | Uses the folder specified for caching compilation artifacts (useful for rapid rebuild and testing)          |
-| -n           | Don't remove sources after completing compilation                                                           |
-| -s           | Will compile everything statically                                                                          |
-| -t           | Set target                                                                                                  |
-| -v           | Enable Valgrind support in PHP                                                                              |
-| -x           | Specifies we are doing cross-compile                                                                        |
-| -P           | Set target to the specified major PocketMine-MP version specified (currently only `5` is supported)         |
-| -z           | PHP version to build, must be `8.4` (optional, if not specified, will be auto-selected by PM version)           |
-
-### Example:
-
-| Target          | Arguments                         |
-|-----------------|-----------------------------------|
-| linux64         | ``-t linux64 -j4 -P5``            |
-| mac64           | ``-t mac-x86-64 -j4 -P5``         |
-| android-aarch64 | ``-t android-aarch64 -x -j4 -P5`` |
-
-## windows-compile-vs.ps1
-
-Uses Visual Studio toolsets to compile PHP binaries on Windows.
-You need to install `git`, `cmake` and Visual Studio 2022 to use this script.
-
-This script doesn't accept parameters, but the following environment variables are influential:
-
-| Variable | Description                                                                                                         |
-| -------- |---------------------------------------------------------------------------------------------------------------------|
-| `PHP_DEBUG_BUILD`  | Disables optimisations and builds PHP with detailed debugging information (useful for debugging segfaults)|
-| `SOURCES_PATH`     | Where to put the downloaded sources for compilation                                                       |
-| `PM_VERSION_MAJOR` | Major version of PocketMine-MP to build for (currently only `5` is supported)                             |
-| `PHP_VERSION_BASE` | PHP version to build, must be `8.4` (optional, if not specified, will be auto-selected by PM version)         |
-
-## For developers: Version info sources
-### Libraries
-
-| Link to package | Needed for | Notes |
-|:----------------|:-----------|:------|
-| [zlib](https://github.com/madler/zlib/tags) | Compression | |
-| [gmp](https://gmplib.org/) | Big integer math for Bedrock packet encryption | Hosted at [DependencyMirror](https://github.com/pmmp/DependencyMirror/releases) to avoid service outages |
-| [curl](https://github.com/curl/curl/releases) | Web requests | |
-| [libyaml](https://github.com/yaml/libyaml/releases) | Parsing YAML config files | |
-| [leveldb](https://github.com/pmmp/leveldb/commits/mojang-compatible/) | Bedrock world support | Custom version based on google/leveldb with minimum required changes to support MCPE worlds |
-| [libxml](https://gitlab.gnome.org/GNOME/libxml2/-/releases) | XML parsing support for UPnP | Hosted at [DependencyMirror](https://github.com/pmmp/DependencyMirror/releases) to avoid service outages |
-| [libpng](https://sourceforge.net/projects/libpng/files/libpng16/) | php-gd, plugin use only | Hosted at [DependencyMirror](https://github.com/pmmp/DependencyMirror/releases) to avoid service outages |
-| [libjpeg](https://ijg.org/) | php-gd, plugin use only | Hosted at [DependencyMirror](https://github.com/pmmp/DependencyMirror/releases) to avoid service outages |
-| [openssl](https://github.com/openssl/openssl/releases) | Bedrock packet encryption, secure web requests | |
-| [libzip](https://github.com/nih-at/libzip/releases) | Resource packs | |
-| [sqlite3](https://sqlite.org/download.html) | Plugin use only | Hosted at [DependencyMirror](https://github.com/pmmp/DependencyMirror/releases) to avoid service outages |
-| [libdeflate](https://github.com/ebiggers/libdeflate/blob/master/NEWS.md) | Faster alternative to zlib for network use | |
-| [pthreads4w](https://sourceforge.net/projects/pthreads4w/files/) | Needed by ext-qthreads on Windows | Hosted at [DependencyMirror](https://github.com/pmmp/DependencyMirror/releases) to avoid service outages |
-
-### PHP & extensions
-
-| Link to package | Needed for | Notes |
-|:----------------|:-----------|:------|
-| [PHP](https://www.php.net/releases/?json&version=8.4) | Everything | PHP is currently pinned to the 8.4 series |
-| [qthreads](https://github.com/Bedrock-Phanatics/ext-qthreads) | PHP threading | Provides the `pmmpthread` module and `pmmp\thread` API, replacing ext-pmmpthread at a pinned commit |
-| [yaml](https://github.com/php/pecl-file_formats-yaml/tags) | YAML config parsing | Yes, the mix of - and _ is intentional. Don't ask me. |
-| [leveldb](https://github.com/pmmp/php-leveldb/commits/pmmp-mojang-compatible/) | Bedrock world support | Custom version to provide `LEVELDB_ZLIB_RAW_COMPRESSION` support |
-| [chunkutils2](https://github.com/pmmp/ext-chunkutils2/releases) | `PalettedBlockArray` and other low-level stuff | |
-| [xdebug](https://github.com/xdebug/xdebug/releases) | Debugging | Not needed for production |
-| [igbinary](https://github.com/igbinary/igbinary/releases) | Faster serialization, mostly for moving stuff between threads | Non-essential, could be ditched if necessary |
-| [crypto](https://github.com/bukka/php-crypto/tags) | Bedrock packet encryption | |
-| [recursionguard](https://github.com/pmmp/ext-recursionguard/releases) | Debugging | Not needed for production |
-| [libdeflate](https://github.com/pmmp/ext-libdeflate/releases) | Faster network compression | Non-essential but provides significant performance advantage over zlib |
-| [morton](https://github.com/pmmp/ext-morton) | Packing X/Z and X/Y/Z coordinates into ints in a format suitable for PHP array keys | Needed for performance |
-| [xxhash](https://github.com/pmmp/ext-xxhash/releases) | Not currently used | Could be replaced by `hash()` in recent versions of PHP but this extension has much better performance |
-| [arraydebug](https://github.com/pmmp/ext-arraydebug/tags) | Debugging array hash collisions | |
-| [encoding](https://github.com/pmmp/ext-encoding/releases) | Disk & network data encoding & decoding | Significantly faster alternative to [BinaryUtils](https://github.com/pmmp/BinaryUtils) |
-| [snappy](https://github.com/kjdev/php-ext-snappy/releases) | Snappy compression and decompression | Bundles the Google Snappy library |
-| [toml](https://github.com/TrixNEW/ext-toml) | TOML config parsing | Compiled in statically, pinned by commit in `versions.env` |
-
-`ext-bedwire` is not bundled yet. Its current build requires Zig 0.17 and its upstream CI covers Linux only. Quark's current extension requirements do not include it. The existing LevelDB and packet extensions remain in the builds.
-
-### Misc
-
-| Link to package | Needed for | Notes |
-|:----------------|:-----------|:------|
-| [php-sdk-binary-tools](https://github.com/php/php-sdk-binary-tools/releases) | Building PHP on Windows | |
+To test a Unix build locally, run `bash tests/test.sh generic bin/php7/bin/php`. On Windows, run `bin\php\php.exe -c bin\php\php.ini tests\generic\smoke.php`. `benchmarks/baseline.php` records startup, throughput, and memory baselines; `Compare PHP compiler options` compares O2 and O3 without changing the release setting.

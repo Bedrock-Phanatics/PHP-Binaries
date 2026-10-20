@@ -48,7 +48,7 @@ function mark_cache {
 	touch "./.compile.sh.cache"
 }
 
-write_out "PocketMine" "PHP compiler for Linux, MacOS and Android"
+write_out "Quark" "PHP compiler for Linux, macOS and Android"
 DIR="$(pwd)"
 BASE_BUILD_DIR="$DIR/install_data"
 #libtool and autoconf have a "feature" where it looks for install.sh/install-sh in ./ ../ and ../../
@@ -230,16 +230,16 @@ case $PM_VERSION_MAJOR in
 		PREFERRED_PHP_VERSION_BASE="8.4"
 		;;
 	"")
-		write_error "Please specify PocketMine-MP major version target with -P (e.g. -P5)"
+		write_error "Use -P5 for the Quark v6 build"
 		exit 1
 		;;
 	*)
-		write_error "PocketMine-MP $PM_VERSION_MAJOR is not supported by this version of the build script"
+		write_error "Legacy build target $PM_VERSION_MAJOR is not supported"
 		exit 1
 		;;
 esac
 
-write_out "opt" "Compiling with configuration for PocketMine-MP $PM_VERSION_MAJOR"
+write_out "opt" "Compiling PHP for Quark v6"
 
 if [ "$PHP_VERSION_BASE" == "auto" ]; then
 	PHP_VERSION_BASE="$PREFERRED_PHP_VERSION_BASE"
@@ -433,7 +433,7 @@ else
 			[ -z "$mtune" ] && mtune=generic
 			GMP_ABI="64"
 		else
-			write_out "ERROR" "PocketMine-MP is no longer supported on 32-bit systems"
+			write_out "ERROR" "Quark requires a 64-bit target"
 			exit 1
 		fi
 	fi
@@ -1432,5 +1432,5 @@ if [ "$SEPARATE_SYMBOLS" != "no" ]; then
 fi
 
 date >> "$DIR/install.log" 2>&1
-write_out "PocketMine" "You should start the server now using \"./start.sh\"."
-write_out "PocketMine" "If it doesn't work, please send the \"install.log\" file to the Bug Tracker."
+write_out "Quark" "PHP was installed in $INSTALL_DIR."
+write_out "Quark" "If it fails to start, attach install.log to a repository issue."
