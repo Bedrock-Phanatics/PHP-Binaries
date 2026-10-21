@@ -1304,8 +1304,12 @@ function relativize_macos_library_paths {
 		do
 		CURRENT_DYLIB_NAME=$(echo ${OTOOL_OUTPUT[$i]} | sed 's# (compatibility version .*##' | xargs)
 		if [[ "$CURRENT_DYLIB_NAME" == "$INSTALL_DIR/"* ]]; then
-			NEW_DYLIB_NAME=$(echo "$CURRENT_DYLIB_NAME" | sed "s{$INSTALL_DIR{@loader_path/..{" | xargs)
-			install_name_tool -change "$CURRENT_DYLIB_NAME" "$NEW_DYLIB_NAME" "$1" >> "$DIR/install.log" 2>&1
+			NEW_DYLIB_NAME="@loader_path/..${CURRENT_DYLIB_NAME#"$INSTALL_DIR"}"
+			if (( i == 1 )) && [[ "$1" == *.dylib* ]]; then
+				install_name_tool -id "$NEW_DYLIB_NAME" "$1" >> "$DIR/install.log" 2>&1 || exit 1
+			else
+				install_name_tool -change "$CURRENT_DYLIB_NAME" "$NEW_DYLIB_NAME" "$1" >> "$DIR/install.log" 2>&1 || exit 1
+			fi
 		elif [[ "$CURRENT_DYLIB_NAME" != "/usr/lib/"* ]] && [[ "$CURRENT_DYLIB_NAME" != "/System/"* ]] && [[ "$CURRENT_DYLIB_NAME" != "@loader_path"* ]] && [[ "$CURRENT_DYLIB_NAME" != "@rpath"* ]]; then
 			write_out "ERROR" "Detected linkage to non-local non-system library $CURRENT_DYLIB_NAME by $1"
 			exit 1
