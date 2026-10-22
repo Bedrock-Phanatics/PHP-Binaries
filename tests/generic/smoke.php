@@ -41,6 +41,12 @@ check(!($opcache['jit']['enabled'] ?? false) && ($opcache['jit']['buffer_size'] 
 check(curl_init() instanceof CurlHandle, 'curl failed to initialize');
 check(version_compare(curl_version()['version'], '8.23.0', '>='), 'libcurl is outdated');
 check(OPENSSL_VERSION_NUMBER >= 0x30500090, 'OpenSSL is outdated');
+$key = openssl_pkey_new(['private_key_type' => OPENSSL_KEYTYPE_EC, 'curve_name' => 'secp384r1']);
+check($key instanceof OpenSSLAsymmetricKey, 'OpenSSL P-384 key generation failed');
+check(openssl_pkey_export($key, $pem), 'OpenSSL private key export failed');
+check(openssl_pkey_get_private($pem) instanceof OpenSSLAsymmetricKey, 'OpenSSL private key import failed');
+check(openssl_sign('quark-runtime', $signature, $key, OPENSSL_ALGO_SHA384), 'OpenSSL signing failed');
+check(openssl_verify('quark-runtime', $signature, openssl_pkey_get_details($key)['key'], OPENSSL_ALGO_SHA384) === 1, 'OpenSSL signature verification failed');
 check(toml_parse("port = 19132\n[[worlds]]\nname = \"world\"") === ['port' => 19132, 'worlds' => [['name' => 'world']]], 'toml_parse failed');
 try{
 	toml_parse('port = ');

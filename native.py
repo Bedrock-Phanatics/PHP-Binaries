@@ -100,6 +100,10 @@ def install(work, php_source, runtime, windows):
             raise RuntimeError("MSVC x64 redistributable DLLs are missing")
         for library in crt[-1].glob("*.dll"):
             shutil.copy2(library, libraries / library.name)
+        (runtime / "run-php.cmd").write_text('@echo off\nsetlocal\nset "PHPRC=%~dp0php.ini"\n'
+                                             'if not defined OPENSSL_CONF set "OPENSSL_CONF=%~dp0extras\\ssl\\openssl.cnf"\n'
+                                             'if not defined OPENSSL_MODULES set "OPENSSL_MODULES=%~dp0extras\\ssl"\n'
+                                             '"%~dp0php.exe" %*\nexit /b %errorlevel%\n')
     else:
         config = runtime / "bin/php-config"
         args += [f"-Dphp-include-dir={run(config, '--include-dir')}"]
@@ -154,6 +158,8 @@ def install(work, php_source, runtime, windows):
         php.write_text('#!/usr/bin/env sh\n'
                        'dir=$(dirname "$(readlink -f "$0")")\n'
                        f'export QUARK_PHP_EXTENSION_DIR="$dir/{relative_modules}"\n'
+                       'export OPENSSL_CONF="${OPENSSL_CONF:-$dir/../openssl.cnf}"\n'
+                       'export OPENSSL_MODULES="${OPENSSL_MODULES:-$dir/../lib/ossl-modules}"\n'
                        'export PHPRC="$dir/php.ini"\n'
                        'exec "$dir/php.bin" "$@"\n')
         php.chmod(0o755)

@@ -675,6 +675,7 @@ function build_openssl {
 	fi
 	write_install
 	make install_sw >> "$DIR/install.log" 2>&1
+	install -m644 apps/openssl.cnf "$INSTALL_DIR/openssl.cnf"
 	cd ..
 	write_done
 }

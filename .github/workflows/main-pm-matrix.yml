@@ -222,6 +222,8 @@ jobs:
         shell: pwsh
         run: |
           $php = (Resolve-Path .\bin\php\php.exe).Path
+          $env:OPENSSL_CONF = "$PWD/bin/php/extras/ssl/openssl.cnf"
+          $env:OPENSSL_MODULES = "$PWD/bin/php/extras/ssl"
           $expected = ((Get-Content .\versions.env | Select-String '^PHP_VERSION=').ToString().Split('='))[1]
           if ((& $php -r 'echo PHP_VERSION;') -ne $expected) { throw "Unexpected PHP version" }
           if ((& $php -r 'echo php_uname("m");') -notmatch 'AMD64|x86_64') { throw "Expected Windows x64 PHP" }
@@ -252,6 +254,8 @@ jobs:
             -Path "PHP-${{ inputs.php-version-base }}-Windows-x64-PM${{ inputs.pm-version-major }}.zip" `
             -DestinationPath .\package-check
           $env:PATH = "$env:SystemRoot\System32;$env:SystemRoot;$PWD/package-check/bin/php"
+          $env:OPENSSL_CONF = "$PWD/package-check/bin/php/extras/ssl/openssl.cnf"
+          $env:OPENSSL_MODULES = "$PWD/package-check/bin/php/extras/ssl"
           1..5 | ForEach-Object {
             & .\package-check\bin\php\php.exe -c .\package-check\bin\php\php.ini -d "extension_dir=$PWD/package-check/bin/php/ext" .\tests\generic\native.php
             if ($LASTEXITCODE -ne 0) { throw "Packaged native runtime failed" }

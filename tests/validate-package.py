@@ -16,9 +16,13 @@ def validate(path):
                     f"{root}/php.ini" if windows else f"{root}/bin/php.ini",
                     f"{root}/native-versions.txt"}
         if windows:
+            required.add(f"{root}/extras/ssl/openssl.cnf")
+            required.add(f"{root}/extras/ssl/legacy.dll")
+            required.add(f"{root}/run-php.cmd")
             required.update(f"{root}/{name}" for name in ("php8ts.dll", "datachannel.dll", "vcruntime140.dll", "vcruntime140_1.dll", "msvcp140.dll"))
             required.update(f"{root}/ext/php_{name}.dll" for name in ("bedwire", "webrtc", "opcache"))
         else:
+            required.add(f"{root}/openssl.cnf")
             required.add(f"{root}/bin/php.bin")
             for module in ("bedwire.so", "webrtc.so", "opcache.so"):
                 if not any(name.startswith(f"{root}/lib/php/extensions/") and name.endswith(f"/{module}") for name in names):

@@ -13,13 +13,13 @@ root = "bin/php/"
 files = {root + name: b"fixture" for name in (
     "php.exe", "php.ini", "php8ts.dll", "datachannel.dll", "vcruntime140.dll",
     "vcruntime140_1.dll", "msvcp140.dll", "ext/php_bedwire.dll", "ext/php_webrtc.dll",
-    "ext/php_opcache.dll", "licenses/bedwire/LICENSE",
+    "ext/php_opcache.dll", "licenses/bedwire/LICENSE", "extras/ssl/openssl.cnf", "extras/ssl/legacy.dll", "run-php.cmd",
 )}
 files[root + "native-versions.txt"] = (Path(__file__).resolve().parents[1] / "versions.env").read_bytes()
 with tempfile.TemporaryDirectory() as directory:
     for suffix in ("zip", "tar.gz"):
         archive = Path(directory) / f"runtime.{suffix}"
-        for missing in (None, "datachannel.dll", "ext/php_bedwire.dll", "vcruntime140.dll", "native-versions.txt"):
+        for missing in (None, "datachannel.dll", "ext/php_bedwire.dll", "vcruntime140.dll", "native-versions.txt", "extras/ssl/openssl.cnf"):
             with zipfile.ZipFile(archive, "w") if suffix == "zip" else tarfile.open(archive, "w:gz") as output:
                 for name, data in files.items():
                     if name == root + str(missing):

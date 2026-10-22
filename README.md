@@ -33,3 +33,5 @@ CI gates both packaging targets on checks of the exact PHP version, architecture
 To test a Unix build locally, run `bash tests/test.sh generic bin/php7/bin/php`. On Windows, run `bin\php\php.exe -c bin\php\php.ini tests\generic\smoke.php`. `benchmarks/baseline.php` records startup, throughput, and memory baselines; `Compare PHP compiler options` compares O2 and O3 without changing the release setting.
 
 The Linux `bin/php7/bin/php` launcher resolves the relocated extension directory and runs `php.bin`. Use the launcher for Composer and Quark so subprocesses inherit the same configuration. Linux SOs use relative loader paths, and Windows runtime DLLs sit beside `php.exe`.
+
+The launchers also select the bundled OpenSSL configuration and provider directory. On Windows, use `bin\php\run-php.cmd` for CLI tools, or set `OPENSSL_CONF` to `bin\php\extras\ssl\openssl.cnf` and `OPENSSL_MODULES` to `bin\php\extras\ssl` before invoking `php.exe` directly. Quark's Windows launchers configure these defaults.
