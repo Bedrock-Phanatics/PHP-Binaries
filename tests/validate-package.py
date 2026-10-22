@@ -5,11 +5,12 @@ import zipfile
 
 
 def validate(path):
-    windows = path.suffix == ".zip"
-    with zipfile.ZipFile(path) if windows else tarfile.open(path) as archive:
-        entries = archive.namelist() if windows else archive.getnames()
+    is_zip = path.suffix == ".zip"
+    with zipfile.ZipFile(path) if is_zip else tarfile.open(path) as archive:
+        entries = archive.namelist() if is_zip else archive.getnames()
         members = {name.removeprefix("./").replace("\\", "/"): name for name in entries}
         names = set(members)
+        windows = "bin/php/php.exe" in names
         root = "bin/php" if windows else "bin/php7"
         required = {f"{root}/php.exe" if windows else f"{root}/bin/php",
                     f"{root}/php.ini" if windows else f"{root}/bin/php.ini",
@@ -31,7 +32,7 @@ def validate(path):
         if missing:
             raise ValueError(f"{path}: missing {sorted(missing)}")
         manifest_name = members[f"{root}/native-versions.txt"]
-        manifest = archive.read(manifest_name) if windows else archive.extractfile(manifest_name).read()
+        manifest = archive.read(manifest_name) if is_zip else archive.extractfile(manifest_name).read()
         versions = dict(line.split("=", 1) for line in (Path(__file__).resolve().parents[1] / "versions.env").read_text().splitlines())
         for key in ("EXT_BEDWIRE_COMMIT", "EXT_WEBRTC_COMMIT", "ZIG_VERSION"):
             if f"{key}={versions[key]}" not in manifest.decode().splitlines():

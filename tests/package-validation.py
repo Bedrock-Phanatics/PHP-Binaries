@@ -1,5 +1,7 @@
 import importlib.util
+import io
 from pathlib import Path
+import tarfile
 import tempfile
 import zipfile
 
@@ -15,16 +17,23 @@ files = {root + name: b"fixture" for name in (
 )}
 files[root + "native-versions.txt"] = (Path(__file__).resolve().parents[1] / "versions.env").read_bytes()
 with tempfile.TemporaryDirectory() as directory:
-    archive = Path(directory) / "runtime.zip"
-    for missing in (None, "datachannel.dll", "ext/php_bedwire.dll", "vcruntime140.dll", "native-versions.txt"):
-        with zipfile.ZipFile(archive, "w") as output:
-            for name, data in files.items():
-                if name != root + str(missing):
-                    output.writestr(name, data)
-        try:
-            module.validate(archive)
-        except ValueError:
-            assert missing is not None
-        else:
-            assert missing is None, f"Accepted missing {missing}"
+    for suffix in ("zip", "tar.gz"):
+        archive = Path(directory) / f"runtime.{suffix}"
+        for missing in (None, "datachannel.dll", "ext/php_bedwire.dll", "vcruntime140.dll", "native-versions.txt"):
+            with zipfile.ZipFile(archive, "w") if suffix == "zip" else tarfile.open(archive, "w:gz") as output:
+                for name, data in files.items():
+                    if name == root + str(missing):
+                        continue
+                    if suffix == "zip":
+                        output.writestr(name, data)
+                    else:
+                        member = tarfile.TarInfo(name)
+                        member.size = len(data)
+                        output.addfile(member, io.BytesIO(data))
+            try:
+                module.validate(archive)
+            except ValueError:
+                assert missing is not None
+            else:
+                assert missing is None, f"Accepted missing {missing}"
 print("Incomplete native packages are rejected")
