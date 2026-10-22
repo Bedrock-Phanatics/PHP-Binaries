@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
-source "$(dirname "${BASH_SOURCE[0]}")/versions.env"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/versions.env" || exit 1
+test -s "$SCRIPT_DIR/sources.sha256" || { echo "Missing sources.sha256" >&2; exit 1; }
 set -o pipefail
 
 function write_out {
@@ -251,6 +253,14 @@ fi
 PHP_VERSION_ID=$(php_version_id "$PHP_VERSION")
 write_out "opt" "Selected PHP $PHP_VERSION ($PHP_VERSION_ID)"
 
+if [[ "$COMPILE_TARGET" != "linux64" && "$COMPILE_TARGET" != "linux" ]] || [[ "$(uname -sm)" != "Linux x86_64" ]] || [[ "$IS_CROSSCOMPILE" == yes || "$DO_STATIC" == yes ]]; then
+	write_error "Quark native packaging requires a native, shared Linux x86_64 build"
+	exit 1
+fi
+for dependency in python3 zig patchelf; do
+	command -v "$dependency" >/dev/null || { write_error "Please install $dependency"; exit 1; }
+done
+
 #Needed to use aliases
 shopt -s expand_aliases
 type wget >> "$DIR/install.log" 2>&1
@@ -282,7 +292,7 @@ function download_file {
 	local expected_hash
 	local actual_hash
 	local temp_path="$cached_path.tmp.$$"
-	expected_hash=$(awk -v name="$cached_filename" '$2 == name { print $1 }' "$DIR/sources.sha256")
+	expected_hash=$(awk -v name="$cached_filename" '{ sub(/\r$/, "") } $2 == name { print $1 }' "$SCRIPT_DIR/sources.sha256")
 	if [[ ! "$expected_hash" =~ ^[0-9a-f]{64}$ ]]; then
 		write_error "No SHA-256 pin for $cached_filename"
 		return 1
@@ -543,6 +553,8 @@ mkdir -m 0755 -p "$LIB_BUILD_DIR" >> "$DIR/install.log" 2>&1
 cd "$BUILD_DIR"
 set -e
 trap 'status=$?; if [ "$status" -ne 0 ]; then tail -n 60 "$DIR/install.log"; fi; exit "$status"' EXIT
+
+python3 "$SCRIPT_DIR/native.py" prepare "$BUILD_DIR/native" --jobs "$THREADS" >> "$DIR/install.log" 2>&1
 
 #PHP
 write_library "PHP" "$PHP_VERSION"
@@ -1112,6 +1124,8 @@ get_github_extension "arraydebug" "$EXT_ARRAYDEBUG_VERSION" "pmmp" "ext-arraydeb
 
 get_github_extension "encoding" "$EXT_ENCODING_VERSION" "pmmp" "ext-encoding"
 
+get_github_extension "webrtc" "$EXT_WEBRTC_COMMIT" "axolotl-pm" "ext-webrtc"
+
 echo -n "  snappy: downloading $EXT_SNAPPY_VERSION..."
 git clone --branch "$EXT_SNAPPY_VERSION" --depth 1 https://github.com/kjdev/php-ext-snappy.git "$BUILD_DIR/php/ext/snappy" >> "$DIR/install.log" 2>&1
 test "$(git -C "$BUILD_DIR/php/ext/snappy" rev-parse HEAD)" = "$EXT_SNAPPY_COMMIT"
@@ -1280,6 +1294,8 @@ $HAVE_MYSQLI \
 --enable-encoding \
 --enable-snappy \
 --enable-toml \
+--enable-webrtc=shared \
+--with-libdatachannel="$BUILD_DIR/native/native" \
 $HAVE_VALGRIND \
 $CONFIGURE_FLAGS >> "$DIR/install.log" 2>&1
 write_compile
@@ -1337,9 +1353,8 @@ fi
 
 write_status "generating php.ini"
 trap - DEBUG
-TIMEZONE=$(date +%Z)
 echo "memory_limit=1024M" >> "$INSTALL_DIR/bin/php.ini"
-echo "date.timezone=$TIMEZONE" >> "$INSTALL_DIR/bin/php.ini"
+echo "date.timezone=UTC" >> "$INSTALL_DIR/bin/php.ini"
 echo "short_open_tag=0" >> "$INSTALL_DIR/bin/php.ini"
 echo "asp_tags=0" >> "$INSTALL_DIR/bin/php.ini"
 echo "phar.require_hash=1" >> "$INSTALL_DIR/bin/php.ini"
@@ -1403,6 +1418,9 @@ fi
 
 
 cd "$DIR"
+echo "extension=webrtc.so" >> "$INSTALL_DIR/bin/php.ini"
+python3 "$SCRIPT_DIR/native.py" install "$BUILD_DIR/native" --php-source "$BUILD_DIR/php" --runtime "$INSTALL_DIR" >> "$DIR/install.log" 2>&1
+
 if [ "$DO_CLEANUP" == "yes" ]; then
 	write_out "INFO" "Cleaning up"
 	rm -r -f "$BUILD_DIR" >> "$DIR/install.log" 2>&1

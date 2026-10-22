@@ -28,7 +28,7 @@ jobs:
       pm-version-major: ${{ matrix.pm-version-major }}
       php-version-base: ${{ matrix.php-version-base }}
       special-release: ${{ matrix.special-release || 'none' }}
-      pm-preview: ${{ matrix.pm-preview || false }}
+      pm-preview: false
     secrets: inherit
 
   publish-archive-release:
@@ -60,9 +60,9 @@ jobs:
             echo "Source: ${{ github.sha }}"
             echo "qthreads: $EXT_QTHREADS_COMMIT"
             echo
-            echo ':information_source: **Linux users**: Choose `x86_64` or `arm64` based on the CPU architecture of the server that runs PHP.'
+            echo ':information_source: **Linux users**: Native packages currently target Linux x86_64 and Windows x64.'
             echo ':package: **Game hosting / panel users**: Use the matching `-hosting.tar.gz` build if your host/file manager does not preserve Unix symbolic links.'
-            echo ":warning: **Windows users**: Install [Visual C++ Redistributable](https://aka.ms/vs/17/release/vc_redist.x64.exe) or the binary will not work."
+            echo ":warning: **Windows users**: Required MSVC runtime DLLs are included beside php.exe."
             echo 'SHA-256 checksums are in `SHA256SUMS`.'
           } > changelog.md
 

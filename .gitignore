@@ -6,3 +6,4 @@ compile.log
 /download_cache/
 /*.zip
 /*.exe
+__pycache__/

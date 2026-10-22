@@ -33,12 +33,13 @@ jobs:
           - arch: x86_64
             runner: ubuntu-22.04
             target: linux64
-          - arch: arm64
-            runner: ubuntu-22.04-arm
-            target: linux-arm64
 
     steps:
       - uses: actions/checkout@v7
+
+      - uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2
+        with:
+          version: 0.17.0
 
       - name: Install build dependencies
         run: |
@@ -46,7 +47,7 @@ jobs:
           sudo apt-get install -y \
             make autoconf automake libtool libtool-bin m4 wget \
             libc-bin gzip bzip2 xz-utils bison g++ git cmake \
-            pkg-config re2c ca-certificates file
+            pkg-config re2c ca-certificates file python3 patchelf
 
       - name: Cache source downloads
         uses: actions/cache@v6
@@ -54,6 +55,11 @@ jobs:
           path: ./download_cache
           key: ${{ runner.os }}-sources-${{ hashFiles('versions.env', 'sources.sha256') }}
           restore-keys: ${{ runner.os }}-sources-
+
+      - name: Verify build input failures
+        run: |
+          bash tests/build-inputs.sh
+          python3 tests/package-validation.py
 
       - name: Compile PHP
         run: |
@@ -83,7 +89,7 @@ jobs:
           fi
           test "$("$PHP_BINARY" -r 'echo PHP_VERSION;')" = "$PHP_VERSION"
 
-          PHP_FILE_INFO="$(file "$PHP_BINARY")"
+          PHP_FILE_INFO="$(file bin/php7/bin/php.bin)"
           echo "$PHP_FILE_INFO"
 
           case "${{ matrix.arch }}" in
@@ -101,9 +107,9 @@ jobs:
               ;;
           esac
 
-          if ldd "$PHP_BINARY" | grep -q 'not found'; then
+          if ldd bin/php7/bin/php.bin | grep -q 'not found'; then
             echo "::error::PHP has missing shared libraries"
-            ldd "$PHP_BINARY"
+            ldd bin/php7/bin/php.bin
             exit 1
           fi
 
@@ -126,7 +132,7 @@ jobs:
           fi
 
           HOSTING_PHP="hosting-root/bin/php7/bin/php"
-          HOSTING_FILE_INFO="$(file "$HOSTING_PHP")"
+          HOSTING_FILE_INFO="$(file hosting-root/bin/php7/bin/php.bin)"
           echo "$HOSTING_FILE_INFO"
 
           case "${{ matrix.arch }}" in
@@ -145,18 +151,21 @@ jobs:
           esac
 
           tar -C hosting-root -czf "$HOSTING_ARCHIVE" bin
+          python3 tests/validate-package.py "$NORMAL_ARCHIVE" "$HOSTING_ARCHIVE"
 
           mkdir -p package-check/normal package-check/hosting
           tar -xzf "$NORMAL_ARCHIVE" -C package-check/normal
           tar -xzf "$HOSTING_ARCHIVE" -C package-check/hosting
           for root in package-check/normal package-check/hosting; do
+            python3 tests/check-libraries.py "$root/bin/php7"
             while IFS= read -r -d '' library; do
               links="$(ldd "$library")"
               if grep 'not found' <<< "$links"; then
                 echo "::error::$library has missing shared libraries"
                 exit 1
               fi
-            done < <(find "$root/bin" -type f \( -name php -o -name '*.so' -o -name '*.so.*' \) -print0)
+            done < <(find "$root/bin" -type f \( -name php.bin -o -name '*.so' -o -name '*.so.*' \) -print0)
+            timeout 60 "$root/bin/php7/bin/php" tests/generic/native.php
             for attempt in 1 2 3 4 5; do
               bash tests/test.sh generic "$root/bin/php7/bin/php"
             done
@@ -181,94 +190,6 @@ jobs:
             ./benchmark.json
           if-no-files-found: error
 
-  macos:
-    name: MacOS ${{ matrix.arch }}
-    runs-on: ${{ matrix.runner }}
-    permissions:
-      contents: read
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - target: mac-x86-64
-            arch: x86_64
-            runner: macos-15-intel
-          - target: mac-arm64
-            arch: arm64
-            runner: macos-15
-
-    steps:
-      - uses: actions/checkout@v7
-
-      - name: Install build dependencies
-        run: |
-          brew uninstall --ignore-dependencies --force pkg-config@0.29.2 || true
-          brew install libtool autoconf automake pkg-config bison re2c
-
-      - name: Cache source downloads
-        uses: actions/cache@v6
-        with:
-          path: ./download_cache
-          key: ${{ runner.os }}-sources-${{ hashFiles('versions.env', 'sources.sha256') }}
-          restore-keys: ${{ runner.os }}-sources-
-
-      - name: Compile PHP
-        run: |
-          export PATH="/usr/local/opt/bison/bin:/opt/homebrew/opt/bison/bin:$PATH"
-          set -euxo pipefail
-          ./compile.sh \
-            -t "${{ matrix.target }}" \
-            -j 4 \
-            -D \
-            -g \
-            -P "${{ inputs.pm-version-major }}" \
-            -c ./download_cache \
-            -z "${{ inputs.php-version-base }}"
-
-      - name: Validate and package
-        timeout-minutes: 10
-        run: |
-          set -euo pipefail
-          source versions.env
-          PHP_BINARY="bin/php7/bin/php"
-          test -x "$PHP_BINARY"
-          test "$("$PHP_BINARY" -r 'echo PHP_VERSION;')" = "$PHP_VERSION"
-          file "$PHP_BINARY"
-          case "${{ matrix.arch }}" in
-            x86_64) file "$PHP_BINARY" | grep -q x86_64 ;;
-            arm64) file "$PHP_BINARY" | grep -q arm64 ;;
-          esac
-          bash tests/test.sh generic "$PHP_BINARY"
-          USE_ZEND_ALLOC=0 MallocScribble=1 bash tests/test.sh generic "$PHP_BINARY"
-          ARCHIVE="PHP-${{ inputs.php-version-base }}-MacOS-${{ matrix.arch }}-PM${{ inputs.pm-version-major }}.tar.gz"
-          tar -czf "$ARCHIVE" bin
-          mkdir package-check
-          tar -xzf "$ARCHIVE" -C package-check
-          while IFS= read -r -d '' library; do
-            links="$(otool -L "$library")"
-            external="$(printf '%s\n' "$links" | awk 'NR > 1 { print $1 }' | grep -Ev '^(/usr/lib/|/System/|@loader_path|@executable_path|@rpath)' || true)"
-            if [ -n "$external" ]; then
-              echo "::error::$library links to an unbundled library: $external"
-              exit 1
-            fi
-          done < <(find package-check/bin -type f \( -name php -o -name '*.so' -o -name '*.so.*' -o -name '*.dylib' -o -name '*.dylib.*' \) -print0)
-          for attempt in 1 2 3 4 5; do
-            bash tests/test.sh generic package-check/bin/php7/bin/php
-          done
-          OPCACHE="$(find bin/php7/lib/php/extensions -name opcache.so -print -quit)"
-          "$PHP_BINARY" -c bin/php7/bin/php.ini -d "extension_dir=$(dirname "$OPCACHE")" benchmarks/baseline.php > benchmark.json
-          tar -czf "Quark-PHP-${PHP_VERSION}-macos-${{ matrix.arch }}-symbols.tar.gz" bin-debug
-
-      - name: Upload MacOS binary
-        uses: actions/upload-artifact@v7
-        with:
-          name: PHP-${{ inputs.php-version-base }}-MacOS-${{ matrix.arch }}-PM${{ inputs.pm-version-major }}
-          path: |
-            ./PHP-${{ inputs.php-version-base }}-MacOS-${{ matrix.arch }}-PM${{ inputs.pm-version-major }}.tar.gz
-            ./Quark-PHP-*-macos-${{ matrix.arch }}-symbols.tar.gz
-            ./benchmark.json
-          if-no-files-found: error
-
   windows:
     name: Windows x64
     runs-on: windows-2022
@@ -277,6 +198,10 @@ jobs:
 
     steps:
       - uses: actions/checkout@v7
+
+      - uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2
+        with:
+          version: 0.17.0
 
       - name: Cache source downloads
         uses: actions/cache@v6
@@ -302,6 +227,8 @@ jobs:
           if ((& $php -r 'echo php_uname("m");') -notmatch 'AMD64|x86_64') { throw "Expected Windows x64 PHP" }
           & $php -c .\bin\php\php.ini .\tests\generic\smoke.php
           if ($LASTEXITCODE -ne 0) { throw "PHP smoke tests failed" }
+          & $php -c .\bin\php\php.ini -d "extension_dir=$PWD/bin/php/ext" .\tests\generic\native.php
+          if ($LASTEXITCODE -ne 0) { throw "Native runtime tests failed" }
           $env:USE_ZEND_ALLOC = '0'
           & $php -c .\bin\php\php.ini .\tests\generic\smoke.php
           if ($LASTEXITCODE -ne 0) { throw "PHP allocator smoke tests failed" }
@@ -318,11 +245,17 @@ jobs:
             -Path .\bin `
             -DestinationPath "PHP-${{ inputs.php-version-base }}-Windows-x64-PM${{ inputs.pm-version-major }}.zip"
 
+          python tests/validate-package.py "PHP-${{ inputs.php-version-base }}-Windows-x64-PM${{ inputs.pm-version-major }}.zip"
+          if ($LASTEXITCODE -ne 0) { throw "Native package files are missing" }
+
           Expand-Archive `
             -Path "PHP-${{ inputs.php-version-base }}-Windows-x64-PM${{ inputs.pm-version-major }}.zip" `
             -DestinationPath .\package-check
+          $env:PATH = "$env:SystemRoot\System32;$env:SystemRoot;$PWD/package-check/bin/php"
           1..5 | ForEach-Object {
-            & .\package-check\bin\php\php.exe -c .\package-check\bin\php\php.ini .\tests\generic\smoke.php
+            & .\package-check\bin\php\php.exe -c .\package-check\bin\php\php.ini -d "extension_dir=$PWD/package-check/bin/php/ext" .\tests\generic\native.php
+            if ($LASTEXITCODE -ne 0) { throw "Packaged native runtime failed" }
+            & .\package-check\bin\php\php.exe -c .\package-check\bin\php\php.ini -d "extension_dir=$PWD/package-check/bin/php/ext" .\tests\generic\smoke.php
             if ($LASTEXITCODE -ne 0) { throw "Packaged PHP thread stress failed on iteration $_" }
           }
 
@@ -338,7 +271,7 @@ jobs:
 
   publish:
     name: Publish Quark binaries
-    needs: [linux, macos, windows]
+    needs: [linux, windows]
     runs-on: ubuntu-22.04
     if: ${{ github.ref_name == 'stable' && github.ref_type == 'branch' && !contains(github.event.head_commit.message, '[no release]') }}
     concurrency: release-${{ inputs.php-version-base }}-pm${{ inputs.pm-version-major }}
@@ -370,9 +303,9 @@ jobs:
             echo "Source: ${{ github.sha }}"
             echo "qthreads: $EXT_QTHREADS_COMMIT"
             echo
-            echo ':information_source: **Linux users**: Choose `x86_64` or `arm64` based on the CPU architecture of the server that will run PHP, not the phone/PC used to upload the files.'
+            echo ':information_source: **Linux users**: Native packages currently target Linux x86_64 and Windows x64.'
             echo ':package: **Game hosting / panel users**: Use the matching `-hosting.tar.gz` Linux build if your host/file manager does not preserve Unix symbolic links.'
-            echo ":warning: **Windows users**: Install [Visual C++ Redistributable](https://aka.ms/vs/17/release/vc_redist.x64.exe) or the binary will not work."
+            echo ":warning: **Windows users**: Required MSVC runtime DLLs are included beside php.exe."
             echo "SHA-256 checksums are in \`SHA256SUMS\`."
             echo
           } > changelog.md

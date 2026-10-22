@@ -9,24 +9,20 @@ fi
 source "$(dirname "$0")/../versions.env"
 base="${PHP_VERSION%.*}"
 major="$1"
-mkdir -p release-assets
+mkdir release-assets
 
-for arch in x86_64 arm64; do
-	for suffix in '' '-hosting'; do
-		name="PHP-$base-Linux-$arch-PM$major$suffix.tar.gz"
-		cp "PHP-$base-Linux-$arch-PM$major/$name" "release-assets/$name"
-	done
-	name="Quark-PHP-$PHP_VERSION-linux-$arch-symbols.tar.gz"
-	cp "PHP-$base-Linux-$arch-PM$major/$name" "release-assets/$name"
-	name="PHP-$base-MacOS-$arch-PM$major.tar.gz"
-	cp "PHP-$base-MacOS-$arch-PM$major/$name" "release-assets/$name"
-	name="Quark-PHP-$PHP_VERSION-macos-$arch-symbols.tar.gz"
-	cp "PHP-$base-MacOS-$arch-PM$major/$name" "release-assets/$name"
+for suffix in '' '-hosting'; do
+	name="PHP-$base-Linux-x86_64-PM$major$suffix.tar.gz"
+	cp "PHP-$base-Linux-x86_64-PM$major/$name" "release-assets/$name"
 done
+name="Quark-PHP-$PHP_VERSION-linux-x86_64-symbols.tar.gz"
+cp "PHP-$base-Linux-x86_64-PM$major/$name" "release-assets/$name"
 name="PHP-$base-Windows-x64-PM$major.zip"
 cp "PHP-$base-Windows-x64-PM$major/$name" "release-assets/$name"
 name="Quark-PHP-$PHP_VERSION-windows-x64-symbols.zip"
 cp "PHP-$base-Windows-x64-PM$major/$name" "release-assets/$name"
+
+python3 "$(dirname "$0")/validate-package.py" release-assets/PHP-*.tar.gz release-assets/PHP-*.zip
 
 for archive in release-assets/*.tar.gz; do
 	tar -tzf "$archive" > /dev/null

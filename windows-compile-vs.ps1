@@ -112,7 +112,7 @@ date >> "$log_file"
 
 pm-echo "Checking dependencies"
 
-$script_dependencies = @("git", "cmake")
+$script_dependencies = @("git", "cmake", "python", "zig")
 foreach ($dep in $script_dependencies) {
     $depInfo = Get-Command "$dep" -ErrorAction SilentlyContinue
     if ($depInfo -eq $null) {
@@ -135,6 +135,7 @@ $PHP_DEBUG_BUILD=0
 if ($env:PHP_DEBUG_BUILD -eq 1) {
 	$PHP_DEBUG_BUILD=1
 }
+if ($PHP_DEBUG_BUILD -ne 0) { pm-fatal-error "Native packaging currently requires a release PHP SDK" }
 
 $MSBUILD_CONFIGURATION="RelWithDebInfo"
 
@@ -482,6 +483,7 @@ function download-php-extensions {
     get-github-extension "xdebug"                $PHP_XDEBUG_VER                "xdebug"   "xdebug"
     get-github-extension "arraydebug"            $PHP_ARRAYDEBUG_VER            "pmmp"     "ext-arraydebug"
     get-github-extension "encoding"              $PHP_ENCODING_VER              "pmmp"     "ext-encoding"
+    get-github-extension "webrtc" $versions.EXT_WEBRTC_COMMIT "axolotl-pm" "ext-webrtc"
 
     write-library "php-ext snappy" $PHP_SNAPPY_VER
     write-download
@@ -556,6 +558,11 @@ cd $BASE_PATH >> $log_file 2>&1
 download-php
 download-php-extensions
 
+$nativeWork = "$BASE_PATH\quark-native"
+& python "$PSScriptRoot\native.py" prepare $nativeWork
+if ($LASTEXITCODE -ne 0) { pm-fatal-error "Native dependency build failed" }
+$nativePrefix = "$nativeWork\native"
+
 cd "$SOURCES_PATH"
 write-library "PHP" $PHP_VER
 write-configure
@@ -593,6 +600,8 @@ sdk-command "configure^`
     --enable-snappy=shared^`
     --enable-tokenizer^`
     --enable-toml^`
+    --enable-webrtc=shared^`
+    --with-libdatachannel=`"$nativePrefix`"^`
     --enable-xmlreader^`
     --enable-xmlwriter^`
     --enable-xxhash^`
@@ -656,6 +665,7 @@ $php_ini="$outpath\bin\php\php.ini"
 #all this work to make PS output utf-8/ascii instead of utf-16 :(
 Out-File -FilePath $php_ini -Encoding ascii -InputObject ";Quark PHP configuration"
 append-file-utf8 "memory_limit=1024M" $php_ini
+append-file-utf8 "date.timezone=UTC" $php_ini
 append-file-utf8 "display_errors=1" $php_ini
 append-file-utf8 "display_startup_errors=1" $php_ini
 append-file-utf8 "error_reporting=-1" $php_ini
@@ -670,6 +680,7 @@ append-file-utf8 "extension=php_crypto.dll" $php_ini
 append-file-utf8 "extension=php_libdeflate.dll" $php_ini
 append-file-utf8 "extension=php_encoding.dll" $php_ini
 append-file-utf8 "extension=php_snappy.dll" $php_ini
+append-file-utf8 "extension=php_webrtc.dll" $php_ini
 append-file-utf8 "igbinary.compact_strings=0" $php_ini
 append-file-utf8 "zend_extension=php_opcache.dll" $php_ini
 append-file-utf8 "opcache.enable=1" $php_ini
@@ -700,6 +711,8 @@ append-file-utf8 "xdebug.profiler_output_name=cachegrind.%s.%p.%r" $php_ini
 append-file-utf8 "xdebug.gc_stats_output_name=gcstats.%s.%p.%r" $php_ini
 append-file-utf8 "xdebug.trace_output_name=trace.%s.%p.%r" $php_ini
 write-done
+& python "$PSScriptRoot\native.py" install $nativeWork --php-source $SOURCES_PATH --runtime "$outpath\bin\php"
+if ($LASTEXITCODE -ne 0) { pm-fatal-error "Native extension packaging failed" }
 Remove-Item -LiteralPath "$outpath\bin\php\dev\php8ts.lib" -ErrorAction SilentlyContinue
 Remove-Item -LiteralPath "$outpath\bin\php\dev" -ErrorAction SilentlyContinue
 Remove-Item -LiteralPath "$outpath\bin\php\deplister.exe", "$outpath\bin\php\news.txt", "$outpath\bin\php\snapshot.txt", "$outpath\bin\php\README.md", "$outpath\bin\php\php.ini-development", "$outpath\bin\php\php.ini-production" -ErrorAction SilentlyContinue

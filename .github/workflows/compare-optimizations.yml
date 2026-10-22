@@ -13,13 +13,17 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      - uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2
+        with:
+          version: 0.17.0
+
       - name: Install build dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y \
             make autoconf automake libtool libtool-bin m4 wget \
             libc-bin gzip bzip2 xz-utils bison g++ git cmake \
-            pkg-config re2c ca-certificates file
+            pkg-config re2c ca-certificates file python3 patchelf
 
       - name: Cache source downloads
         uses: actions/cache@v6
