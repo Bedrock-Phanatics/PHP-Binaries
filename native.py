@@ -1,4 +1,5 @@
 import argparse
+import hashlib
 import os
 from pathlib import Path
 import platform
@@ -55,15 +56,21 @@ def prepare(work, windows, jobs):
         run("git", "submodule", "update", "--init", "--recursive", cwd=source)
     for setting in ("set MBEDTLS_SSL_DTLS_SRTP", "set MBEDTLS_AES_ROM_TABLES", "unset MBEDTLS_DEBUG_C", "unset MBEDTLS_SELF_TEST"):
         run("python", tls / "scripts/config.py", "-f", tls / "include/mbedtls/mbedtls_config.h", *setting.split())
-    patches = [nethernet / f"tools/libdatachannel-{name}.patch" for name in (
-        "bounds", "mbedtls-link-order", "threadpool", "dtls-timer", "sctp-timer-wheel",
-        "juice-timers", "sctp-receive-pause", "dtls-incoming", "juice-mux-routing", "sctp-unacked", "closed-callbacks",
-    )]
+    # The pinned nethernet's own Windows setup lists its patches, so the two cannot drift apart.
+    listed = re.search(r"\$patchNames = @\((.*?)\)", (nethernet / "tools/setup-native.ps1").read_text(), re.S)
+    if listed is None:
+        raise RuntimeError("Missing nethernet libdatachannel patch list")
+    names = [*re.findall(r"'([a-z0-9-]+)'", listed[1]), "mbedtls-link-order"]
+    patches = [nethernet / f"tools/libdatachannel-{name}.patch" for name in names]
     # Existing builds must contain exactly the pinned patches.
-    if not (work / "patched").exists():
+    stamp = work / "patched"
+    wanted = "\n".join(f"{patch.name} {hashlib.sha256(patch.read_bytes()).hexdigest()}" for patch in patches)
+    if not stamp.exists() or stamp.read_text() != wanted:
+        run("git", "checkout", "-q", "--", ".", cwd=rtc)
+        run("git", "submodule", "foreach", "--quiet", "--recursive", "git checkout -q -- .", cwd=rtc)
         for patch in patches:
             run("git", "apply", patch, cwd=rtc)
-        (work / "patched").touch()
+        stamp.write_text(wanted)
     common = ["-G", "Visual Studio 17 2022", "-A", "x64", "-DCMAKE_POLICY_DEFAULT_CMP0091=NEW",
               "-DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreadedDLL", f"-DCMAKE_INSTALL_PREFIX={prefix}"]
     for source, options in (
@@ -86,8 +93,12 @@ def install(work, php_source, runtime, windows):
         raise RuntimeError("Quark requires a ZTS runtime")
     args = ["zig", "build", "-Doptimize=ReleaseSafe", f"-Dnative-prefix={prefix}", "-Dcpu=baseline"]
     if windows:
+        # The build directory also holds php8ts.dll, which the linker would pick over the import library.
+        php_lib = work / "php-lib"
+        php_lib.mkdir(exist_ok=True)
+        shutil.copy2(php_source / "x64/Release_TS/php8ts.lib", php_lib / "php8ts.lib")
         args += ["-Dtarget=x86_64-windows-msvc", "-Dwindows-zts=true", f"-Dphp-include-dir={php_source}",
-                 f"-Dphp-lib-dir={php_source / 'x64/Release_TS'}"]
+                 f"-Dphp-lib-dir={php_lib}"]
         modules = runtime / "ext"
         libraries = runtime
         name = "php_bedwire.dll"
