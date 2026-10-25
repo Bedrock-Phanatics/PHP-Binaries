@@ -93,8 +93,12 @@ def install(work, php_source, runtime, windows):
         raise RuntimeError("Quark requires a ZTS runtime")
     args = ["zig", "build", "-Doptimize=ReleaseSafe", f"-Dnative-prefix={prefix}", "-Dcpu=baseline"]
     if windows:
+        # The build directory also holds php8ts.dll, which the linker would pick over the import library.
+        php_lib = work / "php-lib"
+        php_lib.mkdir(exist_ok=True)
+        shutil.copy2(php_source / "x64/Release_TS/php8ts.lib", php_lib / "php8ts.lib")
         args += ["-Dtarget=x86_64-windows-msvc", "-Dwindows-zts=true", f"-Dphp-include-dir={php_source}",
-                 f"-Dphp-lib-dir={php_source / 'x64/Release_TS'}"]
+                 f"-Dphp-lib-dir={php_lib}"]
         modules = runtime / "ext"
         libraries = runtime
         name = "php_bedwire.dll"
