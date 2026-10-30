@@ -9,7 +9,7 @@ function nativeCheck(bool $condition, string $message): void{
 }
 
 nativeCheck(PHP_INT_SIZE === 8 && PHP_ZTS, '64-bit ZTS PHP is required');
-foreach(['bedwire' => ['0.3.7', '0.4.0'], 'toml' => ['0.1.1', '0.2.0']] as $extension => [$min, $max]){
+foreach(['bedwire' => ['0.3.8', '0.4.0'], 'toml' => ['0.1.1', '0.2.0']] as $extension => [$min, $max]){
 	$version = phpversion($extension);
 	nativeCheck($version !== false && version_compare($version, $min, '>=') && version_compare($version, $max, '<'), "$extension version mismatch");
 }
