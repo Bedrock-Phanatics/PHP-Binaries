@@ -20,11 +20,11 @@ def validate(path):
             required.add(f"{root}/extras/ssl/legacy.dll")
             required.add(f"{root}/run-php.cmd")
             required.update(f"{root}/{name}" for name in ("php8ts.dll", "datachannel.dll", "vcruntime140.dll", "vcruntime140_1.dll", "msvcp140.dll"))
-            required.update(f"{root}/ext/php_{name}.dll" for name in ("bedwire", "webrtc", "opcache"))
+            required.update(f"{root}/ext/php_{name}.dll" for name in ("bedwire", "opcache"))
         else:
             required.add(f"{root}/openssl.cnf")
             required.add(f"{root}/bin/php.bin")
-            for module in ("bedwire.so", "webrtc.so", "opcache.so"):
+            for module in ("bedwire.so", "opcache.so"):
                 if not any(name.startswith(f"{root}/lib/php/extensions/") and name.endswith(f"/{module}") for name in names):
                     raise ValueError(f"{path}: missing {module}")
             if not any(name.startswith(f"{root}/lib/libdatachannel.so.") for name in names):
@@ -38,7 +38,7 @@ def validate(path):
         manifest_name = members[f"{root}/native-versions.txt"]
         manifest = archive.read(manifest_name) if is_zip else archive.extractfile(manifest_name).read()
         versions = dict(line.split("=", 1) for line in (Path(__file__).resolve().parents[1] / "versions.env").read_text().splitlines())
-        for key in ("EXT_BEDWIRE_COMMIT", "EXT_WEBRTC_COMMIT", "ZIG_VERSION"):
+        for key in ("EXT_BEDWIRE_COMMIT", "ZIG_VERSION"):
             if f"{key}={versions[key]}" not in manifest.decode().splitlines():
                 raise ValueError(f"{path}: mismatched {key}")
         if not any(name.startswith(f"{root}/licenses/bedwire/") for name in names):

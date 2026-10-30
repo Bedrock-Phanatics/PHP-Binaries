@@ -483,7 +483,6 @@ function download-php-extensions {
     get-github-extension "xdebug"                $PHP_XDEBUG_VER                "xdebug"   "xdebug"
     get-github-extension "arraydebug"            $PHP_ARRAYDEBUG_VER            "pmmp"     "ext-arraydebug"
     get-github-extension "encoding"              $PHP_ENCODING_VER              "pmmp"     "ext-encoding"
-    get-github-extension "webrtc" $versions.EXT_WEBRTC_COMMIT "axolotl-pm" "ext-webrtc"
 
     write-library "php-ext snappy" $PHP_SNAPPY_VER
     write-download
@@ -600,8 +599,6 @@ sdk-command "configure^`
     --enable-snappy=shared^`
     --enable-tokenizer^`
     --enable-toml^`
-    --enable-webrtc=shared^`
-    --with-libdatachannel=`"$nativePrefix`"^`
     --enable-xmlreader^`
     --enable-xmlwriter^`
     --enable-xxhash^`
@@ -680,7 +677,6 @@ append-file-utf8 "extension=php_crypto.dll" $php_ini
 append-file-utf8 "extension=php_libdeflate.dll" $php_ini
 append-file-utf8 "extension=php_encoding.dll" $php_ini
 append-file-utf8 "extension=php_snappy.dll" $php_ini
-append-file-utf8 "extension=php_webrtc.dll" $php_ini
 append-file-utf8 "igbinary.compact_strings=0" $php_ini
 append-file-utf8 "zend_extension=php_opcache.dll" $php_ini
 append-file-utf8 "opcache.enable=1" $php_ini

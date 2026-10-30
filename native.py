@@ -143,7 +143,7 @@ def install(work, php_source, runtime, windows):
     lines = [line for line in ini.read_text().splitlines() if line not in (f"extension={name}", 'extension_dir="${QUARK_PHP_EXTENSION_DIR}"')]
     ini.write_text("\n".join(lines) + f"\nextension={name}\n")
     manifest = runtime / "native-versions.txt"
-    manifest.write_text("\n".join(f"{key}={VERSIONS[key]}" for key in ("EXT_BEDWIRE_COMMIT", "EXT_WEBRTC_COMMIT", "ZIG_VERSION")) + "\n" +
+    manifest.write_text("\n".join(f"{key}={VERSIONS[key]}" for key in ("EXT_BEDWIRE_COMMIT", "ZIG_VERSION")) + "\n" +
                         "\n".join(f"ZIG_PACKAGE={package.name}" for package in sorted((extension / "zig-pkg").iterdir()) if package.is_dir()) + "\n")
     licenses = runtime / "licenses/bedwire"
     licenses.mkdir(parents=True, exist_ok=True)

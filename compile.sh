@@ -1125,8 +1125,6 @@ get_github_extension "arraydebug" "$EXT_ARRAYDEBUG_VERSION" "pmmp" "ext-arraydeb
 
 get_github_extension "encoding" "$EXT_ENCODING_VERSION" "pmmp" "ext-encoding"
 
-get_github_extension "webrtc" "$EXT_WEBRTC_COMMIT" "axolotl-pm" "ext-webrtc"
-
 echo -n "  snappy: downloading $EXT_SNAPPY_VERSION..."
 git clone --branch "$EXT_SNAPPY_VERSION" --depth 1 https://github.com/kjdev/php-ext-snappy.git "$BUILD_DIR/php/ext/snappy" >> "$DIR/install.log" 2>&1
 test "$(git -C "$BUILD_DIR/php/ext/snappy" rev-parse HEAD)" = "$EXT_SNAPPY_COMMIT"
@@ -1295,8 +1293,6 @@ $HAVE_MYSQLI \
 --enable-encoding \
 --enable-snappy \
 --enable-toml \
---enable-webrtc=shared \
---with-libdatachannel="$BUILD_DIR/native/native" \
 $HAVE_VALGRIND \
 $CONFIGURE_FLAGS >> "$DIR/install.log" 2>&1
 write_compile
@@ -1419,7 +1415,6 @@ fi
 
 
 cd "$DIR"
-echo "extension=webrtc.so" >> "$INSTALL_DIR/bin/php.ini"
 python3 "$SCRIPT_DIR/native.py" install "$BUILD_DIR/native" --php-source "$BUILD_DIR/php" --runtime "$INSTALL_DIR" >> "$DIR/install.log" 2>&1
 
 if [ "$DO_CLEANUP" == "yes" ]; then

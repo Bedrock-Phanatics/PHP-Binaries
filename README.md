@@ -12,7 +12,7 @@ The release workflow includes `SHA256SUMS` and separate `Quark-PHP-...-symbols` 
 
 ## Runtime
 
-The build uses PHP 8.4 ZTS, OPcache for CLI, and qthreads as the `pmmpthread` module. JIT is disabled. LevelDB, chunkutils2, crypto, encoding, igbinary, libdeflate, morton, snappy, TOML, and the other bundled extensions remain available for Quark and plugins. `ext-bedwire` and the transitional `ext-webrtc` bindings share the pinned, patched libdatachannel runtime. Zig and extension revisions are recorded in `versions.env` and `native-versions.txt`. Quark requires ZTS even though ext-bedwire can also be built against NTS PHP.
+The build uses PHP 8.4 ZTS, OPcache for CLI, and qthreads as the `pmmpthread` module. JIT is disabled. LevelDB, chunkutils2, crypto, encoding, igbinary, libdeflate, morton, snappy, TOML, and the other bundled extensions remain available for Quark and plugins. `ext-bedwire` serves NetherNet through the pinned, patched libdatachannel runtime. Zig and extension revisions are recorded in `versions.env` and `native-versions.txt`. Quark requires ZTS even though ext-bedwire can also be built against NTS PHP.
 
 ## Building
 
