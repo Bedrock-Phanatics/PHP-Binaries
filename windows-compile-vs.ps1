@@ -47,7 +47,8 @@ $windowsDepsHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $windowsDepsLock
 function pm-echo {
     param ([string] $message)
 
-    echo "[Quark] $message"
+    # Write-Output would end up in the return value of functions like download-file
+    Write-Host "[Quark] $message"
     echo "[Quark] $message" >> "$log_file"
 }
 
