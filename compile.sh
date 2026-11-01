@@ -782,7 +782,7 @@ function build_leveldb {
 	if cant_use_cache "$leveldb_dir"; then
 		rm -rf "$leveldb_dir"
 		write_download
-		download_github_src "pmmp/leveldb" "$LEVELDB_VERSION" "leveldb" | tar -zx >> "$DIR/install.log" 2>&1
+		download_github_src "Bedrock-Phanatics/leveldb" "$LEVELDB_VERSION" "leveldb" | tar -zx >> "$DIR/install.log" 2>&1
 		#download_file "https://github.com/Mojang/leveldb-mcpe/archive/$LEVELDB_VERSION.tar.gz" | tar -zx >> "$DIR/install.log" 2>&1
 
 		write_configure
@@ -1046,6 +1046,8 @@ build_gmp
 build_openssl
 build_curl
 build_yaml
+#leveldb inflates its blocks with libdeflate
+build_libdeflate
 build_leveldb
 if [ "$COMPILE_GD" == "yes" ]; then
 	build_libpng
@@ -1060,7 +1062,6 @@ fi
 build_libxml2
 build_libzip
 build_sqlite3
-build_libdeflate
 
 # PECL libraries
 

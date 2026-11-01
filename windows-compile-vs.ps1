@@ -391,7 +391,7 @@ function build-pthreads4w {
 function build-leveldb {
     write-library "leveldb" $LEVELDB_MCPE_VER
     write-download
-    $file = download-file "https://github.com/pmmp/leveldb/archive/$LEVELDB_MCPE_VER.zip" "leveldb"
+    $file = download-file "https://github.com/Bedrock-Phanatics/leveldb/archive/$LEVELDB_MCPE_VER.zip" "leveldb"
     write-extracting
     unzip-file $file $pwd
     Move-Item leveldb-* leveldb >> $log_file 2>&1
@@ -548,8 +548,8 @@ if ((Test-Path $customStamp) -and ((Get-Content -LiteralPath $customStamp -Raw).
 
     build-pthreads4w
     build-yaml
-    build-leveldb
     build-libdeflate
+    build-leveldb
     Set-Content -LiteralPath $customStamp -Value $customKey -NoNewline
 }
 
