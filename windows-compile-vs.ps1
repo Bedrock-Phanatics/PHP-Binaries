@@ -476,7 +476,7 @@ function download-php-extensions {
     get-github-extension "yaml"                  $PHP_YAML_VER                  "php"      "pecl-file_formats-yaml"
     get-github-extension "chunkutils2"           $PHP_CHUNKUTILS2_VER           "pmmp"     "ext-chunkutils2"
     get-github-extension "igbinary"              $PHP_IGBINARY_VER              "igbinary" "igbinary"
-    get-github-extension "leveldb"               $PHP_LEVELDB_VER               "pmmp"     "php-leveldb"
+    get-github-extension "leveldb"               $PHP_LEVELDB_VER               "Bedrock-Phanatics" "php-leveldb"
     get-github-extension "recursionguard"        $PHP_RECURSIONGUARD_VER        "pmmp"     "ext-recursionguard"
     get-github-extension "morton"                $PHP_MORTON_VER                "pmmp"     "ext-morton"
     get-github-extension "libdeflate"            $PHP_LIBDEFLATE_VER            "pmmp"     "ext-libdeflate"
