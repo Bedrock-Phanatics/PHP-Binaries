@@ -34,6 +34,11 @@ def prepare(work, windows, jobs):
     if run("zig", "version") != VERSIONS["ZIG_VERSION"]:
         raise RuntimeError("The pinned Zig version is required")
     run("zig", "build", "--fetch", cwd=extension)
+    if not windows:
+        # ZigriteDB only stores worlds on Linux
+        storage = work / "ext-zigritedb"
+        checkout("https://github.com/Bedrock-Phanatics/ext-zigritedb.git", VERSIONS["EXT_ZIGRITEDB_COMMIT"], storage)
+        run("zig", "build", "--fetch", cwd=storage)
     zon = (extension / "build.zig.zon").read_text()
     package = re.search(r'\.nethernet\s*=\s*\.\{.*?\.hash\s*=\s*"([^"]+)"', zon, re.S)
     if package is None:
@@ -133,6 +138,13 @@ def install(work, php_source, runtime, windows):
     subprocess.run(args, cwd=extension, check=True)
     modules.mkdir(parents=True, exist_ok=True)
     shutil.copy2(extension / "zig-out/modules" / name, modules / name)
+    names = [name]
+    storage = work / "ext-zigritedb"
+    if not windows:
+        subprocess.run(["zig", "build", "-Doptimize=ReleaseSafe", "-Dcpu=baseline", f"-Dphp-include-dir={run(config, '--include-dir')}"],
+                       cwd=storage, check=True)
+        shutil.copy2(storage / "zig-out/modules/zigritedb.so", modules / "zigritedb.so")
+        names.append("zigritedb.so")
     if not windows:
         for library in libraries.rglob("*.so*"):
             if library.is_file() and not library.is_symlink():
@@ -140,11 +152,20 @@ def install(work, php_source, runtime, windows):
                 run("patchelf", "--set-rpath", f"$ORIGIN/{relative}", library)
         run("patchelf", "--set-rpath", "$ORIGIN/../lib", php.with_name("php.bin") if php.with_name("php.bin").exists() else php)
     ini = runtime / ("php.ini" if windows else "bin/php.ini")
-    lines = [line for line in ini.read_text().splitlines() if line not in (f"extension={name}", 'extension_dir="${QUARK_PHP_EXTENSION_DIR}"')]
-    ini.write_text("\n".join(lines) + f"\nextension={name}\n")
+    lines = [line for line in ini.read_text().splitlines() if line not in (*(f"extension={n}" for n in names), 'extension_dir="${QUARK_PHP_EXTENSION_DIR}"')]
+    ini.write_text("\n".join(lines) + "".join(f"\nextension={n}" for n in names) + "\n")
     manifest = runtime / "native-versions.txt"
-    manifest.write_text("\n".join(f"{key}={VERSIONS[key]}" for key in ("EXT_BEDWIRE_COMMIT", "ZIG_VERSION")) + "\n" +
-                        "\n".join(f"ZIG_PACKAGE={package.name}" for package in sorted((extension / "zig-pkg").iterdir()) if package.is_dir()) + "\n")
+    pins = ("EXT_BEDWIRE_COMMIT", "ZIG_VERSION") if windows else ("EXT_BEDWIRE_COMMIT", "EXT_ZIGRITEDB_COMMIT", "ZIG_VERSION")
+    packages = sorted({package.name for source in ([extension] if windows else [extension, storage])
+                       for package in (source / "zig-pkg").iterdir() if package.is_dir()})
+    manifest.write_text("\n".join(f"{key}={VERSIONS[key]}" for key in pins) + "\n" +
+                        "\n".join(f"ZIG_PACKAGE={package}" for package in packages) + "\n")
+    if not windows:
+        storage_licenses = runtime / "licenses/zigritedb"
+        storage_licenses.mkdir(parents=True, exist_ok=True)
+        for source in sorted((storage / "zig-pkg").glob("zigritedb-*")):
+            for license in source.glob("LICENSE*"):
+                shutil.copy2(license, storage_licenses / f"{source.name}-{license.name}")
     licenses = runtime / "licenses/bedwire"
     licenses.mkdir(parents=True, exist_ok=True)
     for source in [extension, *sorted((extension / "zig-pkg").iterdir())]:

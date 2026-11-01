@@ -9,9 +9,32 @@ function nativeCheck(bool $condition, string $message): void{
 }
 
 nativeCheck(PHP_INT_SIZE === 8 && PHP_ZTS, '64-bit ZTS PHP is required');
-foreach(['bedwire' => ['0.3.13', '0.4.0'], 'toml' => ['0.1.1', '0.2.0']] as $extension => [$min, $max]){
+$versions = ['bedwire' => ['0.3.13', '0.4.0'], 'toml' => ['0.1.1', '0.2.0']];
+if(PHP_OS_FAMILY === 'Linux'){
+	$versions['zigritedb'] = ['0.2.0', '0.3.0'];
+}
+foreach($versions as $extension => [$min, $max]){
 	$version = phpversion($extension);
 	nativeCheck($version !== false && version_compare($version, $min, '>=') && version_compare($version, $max, '<'), "$extension version mismatch");
+}
+
+if(PHP_OS_FAMILY === 'Linux'){
+	nativeCheck(Zigrite\World::isSupported(), 'ZigriteDB storage is unsupported');
+	$directory = sys_get_temp_dir() . '/native-zigrite-' . getmypid();
+	mkdir($directory);
+	try{
+		$world = new Zigrite\World($directory, ['skip_unchanged' => true]);
+		$world->writeChunk(0, -3, 7, [',' => "\x28", "/\xfc" => 'subchunk']);
+		$world->writeChunk(0, -3, 7, [',' => "\x28", "/\xfc" => 'subchunk', '2' => null]);
+		$world->close();
+		$world = new Zigrite\World($directory, ['skip_unchanged' => true]);
+		$records = $world->getChunk(0, -3, 7) ?? [];
+		ksort($records);
+		nativeCheck($records === [',' => "\x28", "/\xfc" => 'subchunk'] && $world->listChunks(0) === [[-3, 7]], 'ZigriteDB round trip failed');
+		$world->close();
+	}finally{
+		exec('rm -rf ' . escapeshellarg($directory));
+	}
 }
 
 $disk = "\x0a\x00\x00\x03\x01\x00a" . pack('V', 5) . "\x00";

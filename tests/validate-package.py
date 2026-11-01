@@ -24,7 +24,7 @@ def validate(path):
         else:
             required.add(f"{root}/openssl.cnf")
             required.add(f"{root}/bin/php.bin")
-            for module in ("bedwire.so", "opcache.so"):
+            for module in ("bedwire.so", "zigritedb.so", "opcache.so"):
                 if not any(name.startswith(f"{root}/lib/php/extensions/") and name.endswith(f"/{module}") for name in names):
                     raise ValueError(f"{path}: missing {module}")
             if not any(name.startswith(f"{root}/lib/libdatachannel.so.") for name in names):
@@ -38,11 +38,12 @@ def validate(path):
         manifest_name = members[f"{root}/native-versions.txt"]
         manifest = archive.read(manifest_name) if is_zip else archive.extractfile(manifest_name).read()
         versions = dict(line.split("=", 1) for line in (Path(__file__).resolve().parents[1] / "versions.env").read_text().splitlines())
-        for key in ("EXT_BEDWIRE_COMMIT", "ZIG_VERSION"):
+        for key in ("EXT_BEDWIRE_COMMIT", "ZIG_VERSION") if windows else ("EXT_BEDWIRE_COMMIT", "EXT_ZIGRITEDB_COMMIT", "ZIG_VERSION"):
             if f"{key}={versions[key]}" not in manifest.decode().splitlines():
                 raise ValueError(f"{path}: mismatched {key}")
-        if not any(name.startswith(f"{root}/licenses/bedwire/") for name in names):
-            raise ValueError(f"{path}: native licenses are missing")
+        for licensed in ("bedwire",) if windows else ("bedwire", "zigritedb"):
+            if not any(name.startswith(f"{root}/licenses/{licensed}/") for name in names):
+                raise ValueError(f"{path}: {licensed} licenses are missing")
     print(f"{path}: native runtime files present")
 
 
