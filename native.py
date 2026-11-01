@@ -163,7 +163,7 @@ def install(work, php_source, runtime, windows):
     if not windows:
         storage_licenses = runtime / "licenses/zigritedb"
         storage_licenses.mkdir(parents=True, exist_ok=True)
-        for source in sorted((storage / "zig-pkg").glob("zigritedb-*")):
+        for source in [storage, *sorted((storage / "zig-pkg").glob("zigritedb-*"))]:
             for license in source.glob("LICENSE*"):
                 shutil.copy2(license, storage_licenses / f"{source.name}-{license.name}")
     licenses = runtime / "licenses/bedwire"
