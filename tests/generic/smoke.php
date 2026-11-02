@@ -48,6 +48,7 @@ check(openssl_pkey_get_private($pem) instanceof OpenSSLAsymmetricKey, 'OpenSSL p
 check(openssl_sign('quark-runtime', $signature, $key, OPENSSL_ALGO_SHA384), 'OpenSSL signing failed');
 check(openssl_verify('quark-runtime', $signature, openssl_pkey_get_details($key)['key'], OPENSSL_ALGO_SHA384) === 1, 'OpenSSL signature verification failed');
 check(toml_parse("port = 19132\n[[worlds]]\nname = \"world\"") === ['port' => 19132, 'worlds' => [['name' => 'world']]], 'toml_parse failed');
+check(toml_encode(['port' => 19132, 'worlds' => [['name' => 'world']]]) === "port = 19132\n\n[[worlds]]\nname = \"world\"\n", 'toml_encode failed');
 try{
 	toml_parse('port = ');
 	check(false, 'toml_parse accepted invalid TOML');
