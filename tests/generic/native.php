@@ -9,7 +9,7 @@ function nativeCheck(bool $condition, string $message): void{
 }
 
 nativeCheck(PHP_INT_SIZE === 8 && PHP_ZTS, '64-bit ZTS PHP is required');
-$versions = ['bedwire' => ['0.3.13', '0.4.0'], 'toml' => ['0.2.0', '0.3.0']];
+$versions = ['bedwire' => ['0.4.0', '0.5.0'], 'toml' => ['0.2.0', '0.3.0']];
 if(PHP_OS_FAMILY === 'Linux'){
 	$versions['zigritedb'] = ['0.2.0', '0.3.0'];
 }
