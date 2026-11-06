@@ -9,7 +9,7 @@ function nativeCheck(bool $condition, string $message): void{
 }
 
 nativeCheck(PHP_INT_SIZE === 8 && PHP_ZTS, '64-bit ZTS PHP is required');
-$versions = ['bedwire' => ['0.4.0', '0.5.0'], 'toml' => ['0.2.0', '0.3.0']];
+$versions = ['bedwire' => ['0.5.0', '0.6.0'], 'toml' => ['0.2.0', '0.3.0']];
 if(PHP_OS_FAMILY === 'Linux'){
 	$versions['zigritedb'] = ['0.2.0', '0.3.0'];
 }
@@ -45,17 +45,17 @@ try{
 	throw new RuntimeException('Truncated NBT was accepted');
 }catch(Bedwire\NbtException){
 }
-$packet = Bedwire\Protocol::encode('set_time', ['time' => -5]);
-nativeCheck(Bedwire\Protocol::decode($packet) === ['time' => -5], 'Protocol round trip failed');
+nativeCheck(!class_exists(Bedwire\Protocol::class, false), 'ext-bedwire still ships a packet codec');
+$options = ['max_sessions' => 2, 'authentication' => false, 'protocol_version' => 1, 'minecraft_version' => '1.0.0'];
 for($i = 0; $i < 5; ++$i){
-	$server = new Bedwire\Server('127.0.0.1', 0, ['max_sessions' => 2, 'authentication' => false]);
+	$server = new Bedwire\Server('127.0.0.1', 0, $options);
 	nativeCheck($server->isRunning() && $server->getPort() > 0, 'Native server failed to start');
 	$port = $server->getPort();
 	$server->stop(100);
 	$server->stop(100);
 	nativeCheck(!$server->isRunning() && $server->poll() === [], 'Native server failed to stop');
 	unset($server);
-	$server = new Bedwire\Server('127.0.0.1', $port, ['max_sessions' => 2, 'authentication' => false]);
+	$server = new Bedwire\Server('127.0.0.1', $port, $options);
 	unset($server);
 }
-echo "Native extensions, NBT, protocol and server lifecycle OK\n";
+echo "Native extensions, NBT and server lifecycle OK\n";
