@@ -9,13 +9,14 @@ permissions:
 jobs:
   compare:
     runs-on: ubuntu-22.04
-    timeout-minutes: 360
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v7
 
       - uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2
         with:
           version: 0.17.0
+          use-cache: false
 
       - name: Install build dependencies
         run: |
@@ -29,7 +30,7 @@ jobs:
         uses: actions/cache@v6
         with:
           path: ./download_cache
-          key: ${{ runner.os }}-sources-${{ hashFiles('versions.env', 'sources.sha256') }}
+          key: ${{ runner.os }}-sources-${{ hashFiles('sources.sha256') }}
           restore-keys: ${{ runner.os }}-sources-
 
       - name: Build and measure on one runner
