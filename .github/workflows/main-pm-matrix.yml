@@ -37,9 +37,14 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      # No Zig cache: it never sped up Linux builds and each saved copy is hundreds of MB
       - uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2
         with:
           version: 0.17.0
+          use-cache: false
+
+      - name: Log runner CPU
+        run: lscpu | grep -E 'Model name|^CPU\(s\)' || true
 
       - name: Install build dependencies
         run: |
@@ -53,7 +58,7 @@ jobs:
         uses: actions/cache@v6
         with:
           path: ./download_cache
-          key: ${{ runner.os }}-sources-${{ hashFiles('versions.env', 'sources.sha256') }}
+          key: ${{ runner.os }}-sources-${{ hashFiles('sources.sha256') }}
           restore-keys: ${{ runner.os }}-sources-
 
       - name: Verify build input failures
@@ -202,12 +207,16 @@ jobs:
       - uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2
         with:
           version: 0.17.0
+          use-cache: false
+
+      - name: Log runner CPU
+        run: Get-CimInstance Win32_Processor | Select-Object Name, NumberOfLogicalProcessors | Format-List
 
       - name: Cache source downloads
         uses: actions/cache@v6
         with:
           path: ./download_cache
-          key: ${{ runner.os }}-sources-${{ hashFiles('versions.env', 'sources.sha256', 'windows-deps.sha256') }}
+          key: ${{ runner.os }}-sources-${{ hashFiles('sources.sha256', 'windows-deps.sha256') }}
           restore-keys: ${{ runner.os }}-sources-
 
       - name: Compile PHP
