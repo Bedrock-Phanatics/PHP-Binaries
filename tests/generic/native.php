@@ -11,7 +11,7 @@ function nativeCheck(bool $condition, string $message): void{
 nativeCheck(PHP_INT_SIZE === 8 && PHP_ZTS, '64-bit ZTS PHP is required');
 $versions = ['bedwire' => ['0.5.0', '0.6.0'], 'toml' => ['0.2.0', '0.3.0']];
 if(PHP_OS_FAMILY === 'Linux'){
-	$versions['zigritedb'] = ['0.2.0', '0.3.0'];
+	$versions['zigritedb'] = ['0.3.0', '0.4.0'];
 }
 foreach($versions as $extension => [$min, $max]){
 	$version = phpversion($extension);
@@ -32,8 +32,10 @@ if(PHP_OS_FAMILY === 'Linux'){
 		ksort($records);
 		nativeCheck($records === [',' => "\x28", "/\xfc" => 'subchunk'] && $world->listChunks(0) === [[-3, 7]], 'ZigriteDB round trip failed');
 		$world->close();
+		Zigrite\World::exportBedrock($directory, "$directory-leveldb");
+		nativeCheck(Zigrite\World::importBedrock("$directory-leveldb", "$directory-back")['chunk_records'] === 2, 'ZigriteDB conversion failed');
 	}finally{
-		exec('rm -rf ' . escapeshellarg($directory));
+		exec('rm -rf ' . escapeshellarg($directory) . ' ' . escapeshellarg("$directory-leveldb") . ' ' . escapeshellarg("$directory-back"));
 	}
 }
 
