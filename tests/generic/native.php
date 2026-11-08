@@ -9,7 +9,7 @@ function nativeCheck(bool $condition, string $message): void{
 }
 
 nativeCheck(PHP_INT_SIZE === 8 && PHP_ZTS, '64-bit ZTS PHP is required');
-$versions = ['bedwire' => ['0.5.0', '0.6.0'], 'toml' => ['0.2.0', '0.3.0']];
+$versions = ['bedwire' => ['0.5.0', '0.6.0'], 'qmath' => ['0.3.0', '0.4.0'], 'toml' => ['0.2.0', '0.3.0']];
 if(PHP_OS_FAMILY === 'Linux'){
 	$versions['zigritedb'] = ['0.3.0', '0.4.0'];
 }
@@ -38,6 +38,12 @@ if(PHP_OS_FAMILY === 'Linux'){
 		exec('rm -rf ' . escapeshellarg($directory) . ' ' . escapeshellarg("$directory-leveldb") . ' ' . escapeshellarg("$directory-back"));
 	}
 }
+
+$region = new quark\math\collision\CollisionRegion();
+$region->setSectionPalette(0, 0, 0, 0, '', chr(quark\math\collision\CollisionRegion::INFO_CUBE));
+$region->setSectionPalette(0, 1, 0, 0, '', chr(quark\math\collision\CollisionRegion::INFO_NONE));
+$landed = quark\math\collision\CollisionSolver::move($region, new quark\math\AxisAlignedBB(4.2, 16.5, 4.2, 4.8, 18.3, 4.8), 0, -1, 0);
+nativeCheck($landed->onGround && $landed->boundingBox->minY === 16.0, 'Native collision failed');
 
 $disk = "\x0a\x00\x00\x03\x01\x00a" . pack('V', 5) . "\x00";
 $network = Bedwire\Nbt::transcode($disk, Bedwire\Nbt::BEDROCK, Bedwire\Nbt::NETWORK);

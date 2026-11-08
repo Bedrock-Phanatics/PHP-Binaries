@@ -34,6 +34,9 @@ def prepare(work, windows, jobs):
     if run("zig", "version") != VERSIONS["ZIG_VERSION"]:
         raise RuntimeError("The pinned Zig version is required")
     run("zig", "build", "--fetch", cwd=extension)
+    qmath = work / "ext-qmath"
+    checkout("https://github.com/Bedrock-Phanatics/ext-qmath.git", VERSIONS["EXT_QMATH_COMMIT"], qmath)
+    run("zig", "build", "--fetch", cwd=qmath)
     if not windows:
         # ZigriteDB only stores worlds on Linux
         storage = work / "ext-zigritedb"
@@ -139,6 +142,17 @@ def install(work, php_source, runtime, windows):
     modules.mkdir(parents=True, exist_ok=True)
     shutil.copy2(extension / "zig-out/modules" / name, modules / name)
     names = [name]
+    qmath = work / "ext-qmath"
+    qmath_args = ["zig", "build", "-Doptimize=ReleaseSafe", "-Dcpu=baseline"]
+    if windows:
+        qmath_args += ["-Dtarget=x86_64-windows-msvc", "-Dwindows-zts=true", f"-Dphp-include-dir={php_source}", f"-Dphp-lib-dir={work / 'php-lib'}"]
+        qmath_name = "php_qmath.dll"
+    else:
+        qmath_args += [f"-Dphp-include-dir={run(config, '--include-dir')}"]
+        qmath_name = "qmath.so"
+    subprocess.run(qmath_args, cwd=qmath, check=True)
+    shutil.copy2(qmath / "modules" / qmath_name, modules / qmath_name)
+    names.append(qmath_name)
     storage = work / "ext-zigritedb"
     if not windows:
         subprocess.run(["zig", "build", "-Doptimize=ReleaseSafe", "-Dcpu=baseline", f"-Dphp-include-dir={run(config, '--include-dir')}"],
@@ -155,8 +169,8 @@ def install(work, php_source, runtime, windows):
     lines = [line for line in ini.read_text().splitlines() if line not in (*(f"extension={n}" for n in names), 'extension_dir="${QUARK_PHP_EXTENSION_DIR}"')]
     ini.write_text("\n".join(lines) + "".join(f"\nextension={n}" for n in names) + "\n")
     manifest = runtime / "native-versions.txt"
-    pins = ("EXT_BEDWIRE_COMMIT", "ZIG_VERSION") if windows else ("EXT_BEDWIRE_COMMIT", "EXT_ZIGRITEDB_COMMIT", "ZIG_VERSION")
-    packages = sorted({package.name for source in ([extension] if windows else [extension, storage])
+    pins = ("EXT_BEDWIRE_COMMIT", "EXT_QMATH_COMMIT", "ZIG_VERSION") if windows else ("EXT_BEDWIRE_COMMIT", "EXT_QMATH_COMMIT", "EXT_ZIGRITEDB_COMMIT", "ZIG_VERSION")
+    packages = sorted({package.name for source in ([extension, qmath] if windows else [extension, qmath, storage])
                        for package in (source / "zig-pkg").iterdir() if package.is_dir()})
     manifest.write_text("\n".join(f"{key}={VERSIONS[key]}" for key in pins) + "\n" +
                         "\n".join(f"ZIG_PACKAGE={package}" for package in packages) + "\n")
@@ -166,6 +180,11 @@ def install(work, php_source, runtime, windows):
         for source in [storage, *sorted((storage / "zig-pkg").glob("zigritedb-*"))]:
             for license in source.glob("LICENSE*"):
                 shutil.copy2(license, storage_licenses / f"{source.name}-{license.name}")
+    qmath_licenses = runtime / "licenses/qmath"
+    qmath_licenses.mkdir(parents=True, exist_ok=True)
+    for source in [qmath, *sorted((qmath / "zig-pkg").iterdir())]:
+        for license in source.glob("LICENSE*"):
+            shutil.copy2(license, qmath_licenses / f"{source.name}-{license.name}")
     licenses = runtime / "licenses/bedwire"
     licenses.mkdir(parents=True, exist_ok=True)
     for source in [extension, *sorted((extension / "zig-pkg").iterdir())]:
