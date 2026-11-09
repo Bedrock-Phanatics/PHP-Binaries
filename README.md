@@ -4,7 +4,7 @@ PHP 8.4 ZTS builds for Quark v6. Source versions are pinned in `versions.env`, s
 
 ## Downloads
 
-Native packaging targets Linux x86_64 and Windows x64. Existing releases may predate native packaging and must not be used unless their extension versions satisfy Quark's Composer requirements. The `pm5-latest` and `pm5-php-8.4-latest` tags and `PHP-8.4-...-PM5` filenames remain for existing installers. All runtime archives extract to `bin/`.
+Native packaging targets Linux x86_64 and Windows x64. Existing releases may predate native packaging and must not be used unless their extension versions satisfy Quark's Composer requirements. New installers should use the `qrk6-php-8.4-latest` tag. The `pm5-latest` and `pm5-php-8.4-latest` tags and `PHP-8.4-...-PM5` filenames remain for existing installers. All runtime archives extract to `bin/`.
 
 Use the Linux `-hosting.tar.gz` archive when a host or file manager cannot preserve symlinks. It contains the same runtime files with library links resolved. Replace the existing server `bin/` directory before extracting a new archive.
 
