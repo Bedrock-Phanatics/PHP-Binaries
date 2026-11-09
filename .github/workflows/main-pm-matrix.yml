@@ -323,11 +323,24 @@ jobs:
             echo
           } > changelog.md
 
-          echo "The PM5 asset names and release tags remain for existing installers." >> changelog.md
+          echo "Installers should use the qrk6-php-${{ inputs.php-version-base }}-latest tag. The PM5 asset names and pm5 tags remain for existing installers." >> changelog.md
 
       - name: Get date
         id: date
         run: echo "DATE=$(date -u +'%d %b %Y')" >> "$GITHUB_OUTPUT"
+
+      - name: Update PHP-version release at the Quark 6 tag
+        uses: ncipollo/release-action@v1.21.0
+        with:
+          artifacts: ${{ github.workspace }}/release-assets/*
+          name: Quark v6 PHP ${{ inputs.php-version-base }} (${{ steps.date.outputs.DATE }})
+          tag: qrk6-php-${{ inputs.php-version-base }}-latest
+          commit: ${{ github.sha }}
+          allowUpdates: true
+          removeArtifacts: true
+          bodyFile: ${{ github.workspace }}/changelog.md
+          makeLatest: ${{ inputs.special-release == 'default-latest' }}
+          prerelease: ${{ inputs.pm-preview == true }}
 
       - name: Update Quark release at the legacy latest tag
         uses: ncipollo/release-action@v1.21.0
@@ -340,7 +353,7 @@ jobs:
           allowUpdates: true
           removeArtifacts: true
           bodyFile: ${{ github.workspace }}/changelog.md
-          makeLatest: ${{ inputs.special-release == 'default-latest' }}
+          makeLatest: false
           prerelease: ${{ inputs.pm-preview == true }}
 
       - name: Update PHP-version release at the legacy tag
@@ -358,6 +371,8 @@ jobs:
 
       - name: Move compatibility tags after publishing
         run: |
+          git tag -f "qrk6-php-${{ inputs.php-version-base }}-latest"
+          git push -f origin "qrk6-php-${{ inputs.php-version-base }}-latest"
           git tag -f "pm${{ inputs.pm-version-major }}-php-${{ inputs.php-version-base }}-latest"
           git push -f origin "pm${{ inputs.pm-version-major }}-php-${{ inputs.php-version-base }}-latest"
           git tag -f "pm${{ inputs.pm-version-major }}-latest"
