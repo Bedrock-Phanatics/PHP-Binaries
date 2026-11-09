@@ -1114,7 +1114,7 @@ write_done
 
 get_github_extension "leveldb" "$EXT_LEVELDB_VERSION" "Bedrock-Phanatics" "php-leveldb"
 
-get_github_extension "chunkutils2" "$EXT_CHUNKUTILS2_VERSION" "Bedrock-Phanatics" "ext-chunkutils2"
+get_github_extension "chunkutils2" "$EXT_CHUNKUTILS2_VERSION" "pmmp" "ext-chunkutils2"
 
 get_github_extension "libdeflate" "$EXT_LIBDEFLATE_VERSION" "pmmp" "ext-libdeflate"
 

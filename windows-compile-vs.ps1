@@ -474,7 +474,7 @@ function download-php-extensions {
     Push-Location "$SOURCES_PATH\ext" >> $log_file 2>&1
     get-github-extension "pmmpthread" $PHP_QTHREADS_COMMIT "Bedrock-Phanatics" "ext-qthreads"
     get-github-extension "yaml"                  $PHP_YAML_VER                  "php"      "pecl-file_formats-yaml"
-    get-github-extension "chunkutils2"           $PHP_CHUNKUTILS2_VER           "Bedrock-Phanatics" "ext-chunkutils2"
+    get-github-extension "chunkutils2"           $PHP_CHUNKUTILS2_VER           "pmmp"     "ext-chunkutils2"
     get-github-extension "igbinary"              $PHP_IGBINARY_VER              "igbinary" "igbinary"
     get-github-extension "leveldb"               $PHP_LEVELDB_VER               "Bedrock-Phanatics" "php-leveldb"
     get-github-extension "recursionguard"        $PHP_RECURSIONGUARD_VER        "pmmp"     "ext-recursionguard"
