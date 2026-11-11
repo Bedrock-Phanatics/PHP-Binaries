@@ -10,6 +10,7 @@ import subprocess
 
 ROOT = Path(__file__).resolve().parent
 VERSIONS = dict(line.split("=", 1) for line in (ROOT / "versions.env").read_text().splitlines())
+NETHERNET_PATCH = ROOT / "patches/nethernet-idle-wakeup.patch"
 
 
 def run(*args, cwd=None, env=None):
@@ -47,6 +48,11 @@ def prepare(work, windows, jobs):
     if package is None:
         raise RuntimeError("Missing pinned nethernet package")
     nethernet = extension / "zig-pkg" / package[1]
+    patch_args = ["git", "apply", f"--directory=zig-pkg/{package[1]}"]
+    applied = subprocess.run([*patch_args, "--reverse", "--check", str(NETHERNET_PATCH)], cwd=extension,
+                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    if applied.returncode:
+        run(*patch_args, NETHERNET_PATCH, cwd=extension)
     prefix = work / "native"
     env = os.environ.copy()
     for key in ("CFLAGS", "CXXFLAGS", "LDFLAGS", "CPPFLAGS", "LIBRARY_PATH", "PKG_CONFIG_PATH"):
@@ -173,6 +179,7 @@ def install(work, php_source, runtime, windows):
     packages = sorted({package.name for source in ([extension, qmath] if windows else [extension, qmath, storage])
                        for package in (source / "zig-pkg").iterdir() if package.is_dir()})
     manifest.write_text("\n".join(f"{key}={VERSIONS[key]}" for key in pins) + "\n" +
+                        f"NETHERNET_IDLE_PATCH_SHA256={hashlib.sha256(NETHERNET_PATCH.read_bytes()).hexdigest()}\n" +
                         "\n".join(f"ZIG_PACKAGE={package}" for package in packages) + "\n")
     if not windows:
         storage_licenses = runtime / "licenses/zigritedb"

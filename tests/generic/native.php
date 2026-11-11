@@ -66,4 +66,21 @@ for($i = 0; $i < 5; ++$i){
 	$server = new Bedwire\Server('127.0.0.1', $port, $options);
 	unset($server);
 }
+if(PHP_OS_FAMILY === 'Linux'){
+	$lan = stream_socket_server('udp://127.0.0.1:0', $error, $message, STREAM_SERVER_BIND);
+	nativeCheck($lan !== false, 'Failed to reserve a LAN discovery port');
+	$port = (int) substr(strrchr(stream_socket_get_name($lan, false), ':'), 1);
+	fclose($lan);
+	$server = new Bedwire\Server('127.0.0.1', 0, $options + ['lan_port' => $port]);
+	try{
+		$before = getrusage();
+		usleep(1000000);
+		$after = getrusage();
+		$cpu = ($after['ru_utime.tv_sec'] - $before['ru_utime.tv_sec']) + ($after['ru_utime.tv_usec'] - $before['ru_utime.tv_usec']) / 1000000;
+		$cpu += ($after['ru_stime.tv_sec'] - $before['ru_stime.tv_sec']) + ($after['ru_stime.tv_usec'] - $before['ru_stime.tv_usec']) / 1000000;
+		nativeCheck($cpu < 0.25, "Idle LAN discovery consumed {$cpu} CPU seconds");
+	}finally{
+		$server->stop(100);
+	}
+}
 echo "Native extensions, NBT and server lifecycle OK\n";
