@@ -7,3 +7,6 @@ compile.log
 /*.zip
 /*.exe
 __pycache__/
+.code-review-graph/
+.claude/
+.mcp.json
